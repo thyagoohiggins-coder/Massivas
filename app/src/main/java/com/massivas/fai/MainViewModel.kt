@@ -149,6 +149,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         get() = prefs.getBoolean("shareDate", true)
         set(v) { prefs.edit().putBoolean("shareDate", v).apply() }
 
+    fun markReleased(vins: Set<String>) = persist(_vehicles.value.map {
+        if (it.vin in vins) it.copy(status = Status.LIBERADO, bolsao = null, updatedAt = System.currentTimeMillis()) else it
+    })
+
     fun clearReleased() = persist(_vehicles.value.filterNot { it.status == Status.LIBERADO })
 
     fun clearAll() = persist(emptyList())

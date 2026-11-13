@@ -81,6 +81,7 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
     var text by rememberSaveable { mutableStateOf("") }
     var defaultModel by remember { mutableStateOf<CarModel?>(null) }
     var bolsao by remember { mutableStateOf<Bolsao?>(null) }
+    var compareOpen by remember { mutableStateOf(false) }
     var listening by remember { mutableStateOf(false) }
     var partial by remember { mutableStateOf("") }
     var heard by remember { mutableStateOf("") }
@@ -133,6 +134,22 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
 
     BackHandler(onBack = onClose)
 
+    if (compareOpen) {
+        CompareDialog(
+            vm = vm,
+            myVins = entries.map { it.vin },
+            prefixes = prefixes,
+            forcePrefix = forcePrefix,
+            digitLen = digitLen,
+            onKeepOnly = { keep ->
+                val set = keep.toSet()
+                text = entries.filter { it.vin in set }
+                    .joinToString(", ") { e -> if (e.model != null) "${e.vin} ${e.model.short}" else e.vin } + ", "
+            },
+            onDismiss = { compareOpen = false },
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -145,6 +162,9 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
                 navigationIcon = { IconButton(onClick = onClose) { Icon(Icons.Filled.Close, "Fechar") } },
                 title = { Text("Vários VINs", fontWeight = FontWeight.Bold) },
                 actions = {
+                    TextButton(onClick = { compareOpen = true }) {
+                        Text("Comparar", color = MaterialTheme.colorScheme.onPrimary)
+                    }
                     if (text.isNotEmpty()) TextButton(onClick = { text = "" }) {
                         Text("Limpar", color = MaterialTheme.colorScheme.onPrimary)
                     }

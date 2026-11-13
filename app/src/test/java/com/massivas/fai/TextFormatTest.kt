@@ -245,3 +245,19 @@ class TwoPrefixesTest {
         assertEquals(listOf("LV001111", "VB002222", "LV003333"), r.entries.map { it.vin })
     }
 }
+
+class CompareTest {
+    @Test
+    fun diffLists() {
+        val d = VinCompare.compare(listOf("VB000003", "VB000068", "VB000386"), listOf("VB000068", "VB000594", "VB000003"))
+        assertEquals(listOf("VB000386"), d.onlyMine)
+        assertEquals(listOf("VB000003", "VB000068"), d.both)
+        assertEquals(listOf("VB000594"), d.onlyOther)
+    }
+
+    @Test
+    fun readsWhatsappOrCommaList() {
+        assertEquals(listOf("VB001778", "VB000433"), VinCompare.vinsFromText("1 - VB001778 - CS55 - PINTURA\n2 - VB000433 - C928", listOf("VB"), true))
+        assertEquals(listOf("VB001778", "VB000433"), VinCompare.vinsFromText("vb001778, 000433", listOf("VB"), true))
+    }
+}
