@@ -13,9 +13,15 @@ enum class CarModel(val code: String, val label: String, val short: String, val 
     T1E_ADAS("T1E ADAS", "Tiggo 7", "T1E ADAS", listOf("T1E ADAS", "T1E", "TIGGO 7", "TIGGO7", "TIGGO 7 ADAS", "TIGGO7 ADAS")),
     T1E_ICE_LOW("T1E ICE LOW", "Tiggo 7 Ice Low", "T1E ICE LOW", listOf("T1E ICE LOW", "T1E ICE", "T1E LOW", "TIGGO 7 ICE LOW", "TIGGO 7 ICE", "TIGGO7 ICE LOW", "TIGGO7 ICE")),
     T19_ICE_LOW("T19 ICE LOW", "Tiggo 5 Ice Low", "T19", listOf("T19 ICE LOW", "T19 ICE", "T19", "TIGGO 5", "TIGGO5", "TIGGO 5X", "TIGGO 5 ICE LOW", "TIGGO 5 ICE")),
-    T18("T18", "Tiggo 8 Ice", "T18", listOf("T18", "TIGGO 8", "TIGGO8", "TIGGO 8 ICE"));
+    T18("T18", "Tiggo 8 Ice", "T18", listOf("T18", "TIGGO 8", "TIGGO8", "TIGGO 8 ICE")),
+
+    /** VIN importado sem modelo: fica num grupo próprio até alguém escolher o modelo. */
+    SEM_MODELO("", "Sem modelo", "S/ MODELO", listOf("SEM MODELO", "S/ MODELO", "S/MODELO"));
 
     companion object {
+        /** Modelos que aparecem para escolher (sem o "Sem modelo"). */
+        val selectable: List<CarModel> get() = entries.filter { it != SEM_MODELO }
+
         /** Reconhece o modelo num cabeçalho como "CS55 INFINITY - 4" ou "UNI-T - 2". */
         fun fromHeader(line: String): CarModel? {
             val n = normalize(line).replace(Regex("[-–—:]\\s*\\d+\\s*$"), "").trim()

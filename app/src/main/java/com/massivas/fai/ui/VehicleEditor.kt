@@ -89,7 +89,7 @@ fun VehicleEditor(initial: Vehicle?, vm: MainViewModel, onClose: () -> Unit) {
     val focus = LocalFocusManager.current
     var current by remember { mutableStateOf(initial) }
     var vin by remember { mutableStateOf(initial?.vin ?: "") }
-    var model by remember { mutableStateOf(initial?.model ?: vm.lastModel) }
+    var model by remember { mutableStateOf(initial?.model?.takeIf { it != CarModel.SEM_MODELO } ?: if (initial == null) vm.lastModel else null) }
     var modelTouched by remember { mutableStateOf(initial != null) }
     var color by remember { mutableStateOf(initial?.color) }
     var status by remember { mutableStateOf(initial?.status ?: Status.PROCESSO) }
@@ -129,12 +129,9 @@ fun VehicleEditor(initial: Vehicle?, vm: MainViewModel, onClose: () -> Unit) {
     }
 
     fun trySave(next: Boolean) {
-        val m = model
+        val m = model ?: CarModel.SEM_MODELO
         if (cleaned.length < 4) {
             Toast.makeText(ctx, "Digite o VIN", Toast.LENGTH_SHORT).show(); return
-        }
-        if (m == null) {
-            Toast.makeText(ctx, "Escolha o modelo", Toast.LENGTH_SHORT).show(); return
         }
         val base = current ?: duplicate
         val v = Vehicle(
@@ -234,9 +231,9 @@ fun VehicleEditor(initial: Vehicle?, vm: MainViewModel, onClose: () -> Unit) {
 
             // Modelo
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SectionTitle("Modelo")
-                Grid(CarModel.entries.toList(), columns = 2) { m, mod ->
-                    SelectTile(selected = model == m, onClick = { model = m; modelTouched = true }, modifier = mod) { c ->
+                SectionTitle(if (model == null) "Modelo (sem modelo — toque para escolher)" else "Modelo")
+                Grid(CarModel.selectable, columns = 2) { m, mod ->
+                    SelectTile(selected = model == m, onClick = { model = if (model == m) null else m; modelTouched = true }, modifier = mod) { c ->
                         Column {
                             Text(m.label, fontWeight = FontWeight.Bold, color = c)
                             Text(m.code, fontSize = 11.sp, color = c.copy(alpha = 0.75f))

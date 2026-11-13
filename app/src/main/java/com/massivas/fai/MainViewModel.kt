@@ -39,7 +39,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val prefs = app.getSharedPreferences("prefs", 0)
     var lastModel: CarModel?
-        get() = enumOrNull<CarModel>(prefs.getString("lastModel", null))
+        get() = enumOrNull<CarModel>(prefs.getString("lastModel", null))?.takeIf { it != CarModel.SEM_MODELO }
         set(v) { prefs.edit().putString("lastModel", v?.name).apply() }
 
     var shareTitle: String
@@ -168,7 +168,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 )
                 updated++
             } else {
-                val model = p.model ?: fallbackModel ?: continue
+                val model = p.model ?: fallbackModel ?: CarModel.SEM_MODELO
                 list += Vehicle(
                     id = newId(), vin = p.vin, model = model,
                     status = p.status ?: Status.PROCESSO, repairs = p.repairs, notes = p.notes,

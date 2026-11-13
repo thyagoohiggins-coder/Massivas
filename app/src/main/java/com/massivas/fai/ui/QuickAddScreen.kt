@@ -150,8 +150,8 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
                 Column(Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(horizontal = 16.dp, vertical = 10.dp)) {
                     if (missingModel > 0) {
                         Text(
-                            "$missingModel VINs sem modelo — escolha o modelo padrão abaixo ou diga o modelo depois do VIN.",
-                            color = Color(0xFFE65100),
+                            "$missingModel VINs sem modelo: vão para o grupo \"Sem modelo\" (dá para escolher depois).",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 12.sp,
                             modifier = Modifier.padding(bottom = 6.dp),
                         )
@@ -169,7 +169,7 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
                                 Toast.makeText(ctx, "${r.added} adicionados, ${r.updated} atualizados", Toast.LENGTH_LONG).show()
                                 onClose()
                             },
-                            enabled = entries.isNotEmpty() && missingModel == 0,
+                            enabled = entries.isNotEmpty(),
                             modifier = Modifier.weight(1f).height(56.dp),
                         ) {
                             Text(
@@ -253,7 +253,7 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SectionTitle("Modelo para VINs sem modelo (opcional)")
-                Grid(CarModel.entries.toList(), columns = 2) { m, mod ->
+                Grid(CarModel.selectable, columns = 2) { m, mod ->
                     SelectTile(
                         selected = defaultModel == m,
                         onClick = { defaultModel = if (defaultModel == m) null else m },
@@ -277,7 +277,7 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
                             Text(e.vin, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                             Spacer(Modifier.width(8.dp))
                             if (m != null) Pill(text = m.label, color = MaterialTheme.colorScheme.primary, textColor = MaterialTheme.colorScheme.onPrimary)
-                            else Pill(text = "sem modelo", color = Color(0xFFE65100))
+                            else Pill(text = "sem modelo", color = Color(0xFF78909C))
                             Spacer(Modifier.width(6.dp))
                             Text(
                                 buildString {

@@ -365,7 +365,7 @@ private fun ListScreen(
                     Surface(color = MaterialTheme.colorScheme.surfaceContainerHighest, modifier = Modifier.fillMaxWidth()) {
                         Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(model.label, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                            Text("  ${model.code}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (model.code.isNotEmpty()) Text("  ${model.code}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Spacer(Modifier.weight(1f))
                             Pill(text = "${list.size}", color = MaterialTheme.colorScheme.primary, textColor = MaterialTheme.colorScheme.onPrimary)
                         }
@@ -787,12 +787,12 @@ private fun ImportDialog(vm: MainViewModel, onDismiss: () -> Unit) {
                     if (withoutModel.isNotEmpty()) {
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            "${withoutModel.size} VINs sem modelo. Usar:",
+                            "${withoutModel.size} VINs sem modelo. Escolha um (opcional) ou eles vão para \"Sem modelo\":",
                             color = Color(0xFFE65100),
                             style = MaterialTheme.typography.bodySmall,
                         )
                         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            CarModel.entries.forEach { m ->
+                            CarModel.selectable.forEach { m ->
                                 FilterChip(selected = fallback == m, onClick = { fallback = m }, label = { Text(m.label) }, colors = selectedPrimary())
                             }
                         }
@@ -801,7 +801,7 @@ private fun ImportDialog(vm: MainViewModel, onDismiss: () -> Unit) {
             }
         },
         confirmButton = {
-            TextButton(enabled = parsed.isNotEmpty() && (withoutModel.isEmpty() || fallback != null), onClick = {
+            TextButton(enabled = parsed.isNotEmpty(), onClick = {
                 val r = vm.importParsed(parsed, fallback)
                 Toast.makeText(ctx, "${r.added} adicionados, ${r.updated} atualizados", Toast.LENGTH_LONG).show()
                 onDismiss()
