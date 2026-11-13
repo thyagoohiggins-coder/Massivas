@@ -166,7 +166,7 @@ class VoiceFixesTest {
         for (said in listOf("vê bê zero zero", "um dois cinco sete", "CS 55 vírgula", "zero zero um três")) {
             text = QuickVin.tidy(text.trimEnd() + " " + QuickVin.convertSpeech(said), "VB", true, 6)
         }
-        assertEquals("VB001257 CS55, VB 0013", text)
+        assertEquals("VB001257 CS55, 0013", text)
         val r = QuickVin.parse(text, "VB", true, 6)
         assertEquals(listOf("VB001257", "VB000013"), r.entries.map { it.vin })
         assertEquals(CarModel.C655, r.entries[0].model)
