@@ -239,7 +239,7 @@ object QuickVin {
                         val prefixLike = prefix.isNotEmpty() &&
                             (p == prefix || (p.length == prefix.length && p.all { it in confusable }))
                         val nextIsDigits = next != null && next.all(Char::isDigit)
-                        val startsVin = (p.length <= 4 && nextIsDigits && next!!.length >= 4) ||
+                        val startsVin = (p.length <= 4 && nextIsDigits && next!!.length >= 4 && model(p) == null) ||
                             (prefixLike && (next == null || nextIsDigits))
                         when {
                             hasVin && startsVin -> { finish(); letters = p }
