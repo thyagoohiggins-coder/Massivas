@@ -277,7 +277,7 @@ object QuickVin {
                     }
                     val m = model(rest.toString())
                     if (rest.isNotEmpty() && m == null) unknownModels += "$vin: $rest"
-                    if (vin !in entries) entries[vin] = Entry(vin, m, added, fixed, color, stations.toList(), bolsao, status)
+                    if (vin !in entries) entries[vin] = Entry(vin, m, added, fixed, color = color, stations = stations.toList(), bolsao = bolsao, status = status)
                     else {
                         val old = entries.getValue(vin)
                         entries[vin] = old.copy(
