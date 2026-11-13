@@ -12,6 +12,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -70,6 +71,7 @@ import com.massivas.fai.CarModel
 import com.massivas.fai.MainViewModel
 import com.massivas.fai.ParsedVehicle
 import com.massivas.fai.QuickVin
+import com.massivas.fai.Repair
 import com.massivas.fai.Status
 import com.massivas.fai.VoiceDictation
 
@@ -189,12 +191,14 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
                             onClick = {
                                 if (listening) dictation.stop()
                                 val parsed = entries.map { e ->
+                                    val bo = e.bolsao ?: bolsao
                                     ParsedVehicle(
                                         e.vin, e.model ?: if (vm.findByVin(e.vin) == null) defaultModel else null,
-                                        if (bolsao != null) Status.BOLSAO else null, emptyList(), "", color = e.color, bolsao = bolsao,
+                                        e.status ?: if (bo != null) Status.BOLSAO else null,
+                                        e.stations.map { Repair(it) }, "", color = e.color, bolsao = bo,
                                     )
                                 }
-                                val r = vm.importParsed(parsed, defaultModel)
+                                val r = vm.importParsed(parsed, defaultModel, mergeRepairs = true)
                                 Toast.makeText(ctx, "${r.added} adicionados, ${r.updated} atualizados", Toast.LENGTH_LONG).show()
                                 onClose()
                             },
@@ -220,7 +224,7 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
                 Column(Modifier.padding(12.dp)) {
                     Text("Digite ou fale os VINs separados por vírgula", fontWeight = FontWeight.Bold)
                     Text(
-                        "O modelo e a cor (azul, cinza, preto, branco) depois do VIN são opcionais.\n" +
+                        "Depois do VIN pode falar (opcional): modelo, cor, estação (pintura, ex ok, polimento…), bolsão, túnel ou liberado.\n" +
                             "Digitando: VB001778 CS55, VB000433 C928, VB004163\n" +
                             "Falando: \"VB zero zero um sete sete oito CS cinquenta e cinco azul, VB zero zero zero quatro três três…\"\n" +
                             "Quando o VIN completa $digitLen dígitos ou você fala outro VB, o app já passa para o próximo. " +
@@ -344,6 +348,11 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
                                 ColorDot(it, 14)
                                 Text(" ${it.label}", fontSize = 12.sp)
                             }
+                            when (e.status) {
+                                Status.TUNEL -> { Spacer(Modifier.width(6.dp)); Pill(text = "Túnel", color = Status.TUNEL.color) }
+                                Status.LIBERADO -> { Spacer(Modifier.width(6.dp)); Pill(text = "Liberado", color = Status.LIBERADO.color) }
+                                else -> Unit
+                            }
                             Spacer(Modifier.width(6.dp))
                             Text(
                                 buildString {
@@ -354,6 +363,15 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                        }
+                        if (e.stations.isNotEmpty() || e.bolsao != null) {
+                            Row(
+                                Modifier.horizontalScroll(rememberScrollState()).padding(start = 8.dp, bottom = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                e.bolsao?.let { Pill(text = "🅿 ${it.label}", color = Bolsao.color) }
+                                e.stations.forEach { Pill(text = it.label, color = it.color) }
+                            }
                         }
                     }
                     result.unknown.forEach {

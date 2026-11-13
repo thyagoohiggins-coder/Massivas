@@ -157,7 +157,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun clearAll() = persist(emptyList())
 
-    fun importParsed(parsed: List<ParsedVehicle>, fallbackModel: CarModel?): ImportSummary {
+    /** @param mergeRepairs junta as estações novas às que o VIN já tinha (em vez de substituir). */
+    fun importParsed(parsed: List<ParsedVehicle>, fallbackModel: CarModel?, mergeRepairs: Boolean = false): ImportSummary {
         val list = _vehicles.value.toMutableList()
         var added = 0
         var updated = 0
@@ -168,7 +169,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 list[idx] = old.copy(
                     model = p.model ?: old.model,
                     status = p.status ?: old.status,
-                    repairs = if (p.repairs.isNotEmpty()) p.repairs else if (p.status == Status.LIBERADO || p.status == Status.TUNEL) old.repairs.map { it.copy(done = true) } else old.repairs,
+                    repairs = if (p.repairs.isNotEmpty() && mergeRepairs) old.repairs + p.repairs.filter { r -> old.repairs.none { it.station == r.station } }
+                    else if (p.repairs.isNotEmpty()) p.repairs else if (p.status == Status.LIBERADO || p.status == Status.TUNEL) old.repairs.map { it.copy(done = true) } else old.repairs,
                     notes = p.notes.ifBlank { old.notes },
                     forecast = p.forecast ?: old.forecast,
                     difficulty = p.difficulty ?: old.difficulty,

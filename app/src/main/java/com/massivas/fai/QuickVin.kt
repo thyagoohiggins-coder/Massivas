@@ -16,6 +16,9 @@ object QuickVin {
         val prefixFixed: Boolean = false,
         val padded: Boolean = false,
         val color: CarColor? = null,
+        val stations: List<Station> = emptyList(),
+        val bolsao: Bolsao? = null,
+        val status: Status? = null,
     )
     data class Result(
         val entries: List<Entry>,
@@ -156,6 +159,43 @@ object QuickVin {
         "BRANCO" to CarColor.BRANCO, "BRANCA" to CarColor.BRANCO,
     )
 
+    /** Frases-chave (estação, bolsão, status) já no formato das peças faladas. */
+    private class Phrase(val tokens: List<String>, val marker: String)
+
+    private val phrases: List<Phrase> by lazy {
+        fun toks(k: String) = segments(k).flatten()
+        val list = mutableListOf<Phrase>()
+        for (s in Station.entries) for (k in s.keywords) list += Phrase(toks(k), "#ST:" + s.name)
+        for (s in Station.entries) list += Phrase(toks(s.label), "#ST:" + s.name)
+        list += Phrase(toks("AVALIACAO"), "#ST:" + Station.AVALIACAO_QA.name)
+        for (b in Bolsao.entries) {
+            for (k in b.keywords) list += Phrase(toks(k), "#BO:" + b.name)
+            list += Phrase(toks(b.label), "#BO:" + b.name)
+        }
+        for (k in listOf("TUNEL DE LIBERACAO", "TUNEL")) list += Phrase(toks(k), "#SS:" + Status.TUNEL.name)
+        for (k in listOf("LIBERADO", "LIBERADA")) list += Phrase(toks(k), "#SS:" + Status.LIBERADO.name)
+        list.filter { it.tokens.isNotEmpty() }
+            .distinctBy { it.tokens to it.marker }
+            .sortedWith(compareByDescending<Phrase> { it.tokens.size }.thenByDescending { it.tokens.sumOf { t -> t.length } })
+    }
+
+    /** Troca as palavras-chave por marcadores ("PINTURA" → "#ST:PINTURA"). */
+    private fun markPhrases(seg: List<String>): List<String> {
+        val out = mutableListOf<String>()
+        var i = 0
+        while (i < seg.size) {
+            val ph = phrases.firstOrNull { ph ->
+                i + ph.tokens.size <= seg.size && ph.tokens.indices.all { seg[i + it] == ph.tokens[it] } &&
+                    // "T1E ADAS" e "TIGGO 7 ADAS" são modelo, não a estação Adas
+                    !(ph.marker == "#ST:ADAS" && (
+                        out.takeLast(3).joinToString("") == "T1E" || out.lastOrNull() == "T1E" ||
+                            out.takeLast(2) == listOf("TIGGO", "7")))
+            }
+            if (ph != null) { out += ph.marker; i += ph.tokens.size } else { out += seg[i]; i++ }
+        }
+        return out
+    }
+
     private fun isFull(p: String) = p.length == 17 && p.any(Char::isDigit) && p.any(Char::isLetter)
 
     /**
@@ -201,6 +241,9 @@ object QuickVin {
         var full: String? = null
         val rest = StringBuilder()
         var color: CarColor? = null
+        val stations = mutableListOf<Station>()
+        var bolsao: Bolsao? = null
+        var status: Status? = null
 
         fun model(r0: String): CarModel? {
             val r = r0.replace("TIGUO", "TIGGO").replace(Regex("TIGO(?!O)"), "TIGGO")
@@ -234,12 +277,19 @@ object QuickVin {
                     }
                     val m = model(rest.toString())
                     if (rest.isNotEmpty() && m == null) unknownModels += "$vin: $rest"
-                    if (vin !in entries) entries[vin] = Entry(vin, m, added, fixed, color = color)
+                    if (vin !in entries) entries[vin] = Entry(vin, m, added, fixed, color, stations.toList(), bolsao, status)
                     else {
                         val old = entries.getValue(vin)
-                        entries[vin] = old.copy(model = m ?: old.model, color = color ?: old.color)
+                        entries[vin] = old.copy(
+                            model = m ?: old.model, color = color ?: old.color,
+                            stations = (old.stations + stations).distinct(), bolsao = bolsao ?: old.bolsao, status = status ?: old.status,
+                        )
                     }
-                    canonical += listOfNotNull(vin, m?.short, color?.label?.uppercase()).joinToString(" ")
+                    canonical += (listOfNotNull(
+                        vin, m?.short, color?.label?.uppercase(),
+                        when (status) { Status.TUNEL -> "TÚNEL"; Status.LIBERADO -> "LIBERADO"; else -> null },
+                        bolsao?.label?.uppercase(),
+                    ) + stations.map { it.label.uppercase() }).joinToString(" ")
                 }
                 letters.isNotEmpty() || digits.isNotEmpty() || rest.isNotEmpty() -> {
                     val raw = listOf(letters, digits, rest.toString()).filter { it.isNotEmpty() }.joinToString(" ")
@@ -248,6 +298,7 @@ object QuickVin {
                 }
             }
             letters = ""; digits = ""; full = null; rest.setLength(0); color = null
+            stations.clear(); bolsao = null; status = null
         }
 
         fun startDigits(p: String) {
@@ -264,7 +315,7 @@ object QuickVin {
         for (seg0 in segments(text)) {
             // junta letras vizinhas: "V" "B" → "VB", "UNI" "T" → "UNIT"
             val seg = mutableListOf<String>()
-            for (p in seg0) {
+            for (p in markPhrases(seg0)) {
                 val last = seg.lastOrNull()
                 if (last != null && !isFull(p) && !isFull(last) && p.all(Char::isLetter) && last.all(Char::isLetter) &&
                     p !in colorWords && last !in colorWords
@@ -276,6 +327,9 @@ object QuickVin {
                 when {
                     isFull(p) -> { if (hasVin || letters.isNotEmpty()) finish(); full = p }
                     p in colorWords -> color = colorWords.getValue(p)
+                    p.startsWith("#ST:") -> enumOrNull<Station>(p.substring(4))?.let { if (it !in stations) stations += it }
+                    p.startsWith("#BO:") -> bolsao = enumOrNull<Bolsao>(p.substring(4))
+                    p.startsWith("#SS:") -> status = enumOrNull<Status>(p.substring(4))
                     p.all(Char::isLetter) -> {
                         val next = seg.getOrNull(i + 1)
                         // "VB"/"BB" (parecido com o prefixo) começa outro VIN, mesmo no fim de um trecho falado

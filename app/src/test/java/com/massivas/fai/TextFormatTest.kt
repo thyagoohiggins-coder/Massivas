@@ -290,3 +290,32 @@ class SpokenColorTest {
         assertEquals(CarColor.AZUL, r.entries[1].color)
     }
 }
+
+class SpokenStationTest {
+    @Test
+    fun detectsStationsBolsaoAndStatus() {
+        var text = ""
+        for (said in listOf(
+            "VB zero zero três nove quatro zero uni tê branco pintura e polimento",
+            "VB zero zero quatro seis quatro cinco ex ok",
+            "VB zero zero cinco sete zero seis teste de rolo",
+            "VB zero zero cinco oito dois um bolsão heliponto",
+            "VB zero zero cinco nove seis quatro tiggo sete adas túnel",
+            "VB zero zero seis zero zero zero avaliação QA ilha sing off",
+        )) {
+            text = QuickVin.tidy(text.trimEnd() + " " + QuickVin.convertSpeech(said), "VB", true, 6)
+        }
+        val r = QuickVin.parse(text, "VB", true, 6).entries.associateBy { it.vin }
+        assertEquals(listOf(Station.PINTURA, Station.POLIMENTO), r["VB003940"]!!.stations)
+        assertEquals(CarColor.BRANCO, r["VB003940"]!!.color)
+        assertEquals(CarModel.S202, r["VB003940"]!!.model)
+        assertEquals(listOf(Station.EX_OK), r["VB004645"]!!.stations)
+        assertEquals(listOf(Station.TESTE_ROLO), r["VB005706"]!!.stations)
+        assertEquals(Bolsao.HELIPONTO, r["VB005821"]!!.bolsao)
+        assertTrue(r["VB005821"]!!.stations.isEmpty())
+        assertEquals(CarModel.T1E_ADAS, r["VB005964"]!!.model)
+        assertTrue(r["VB005964"]!!.stations.isEmpty())
+        assertEquals(Status.TUNEL, r["VB005964"]!!.status)
+        assertEquals(listOf(Station.AVALIACAO_QA, Station.ILHA_SING_OFF), r["VB006000"]!!.stations)
+    }
+}
