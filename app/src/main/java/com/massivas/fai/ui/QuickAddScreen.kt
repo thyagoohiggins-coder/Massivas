@@ -70,6 +70,7 @@ import com.massivas.fai.CarModel
 import com.massivas.fai.MainViewModel
 import com.massivas.fai.ParsedVehicle
 import com.massivas.fai.QuickVin
+import com.massivas.fai.Status
 import com.massivas.fai.VoiceDictation
 
 /** Adicionar vários VINs de uma vez: digitando separados por vírgula ou falando. */
@@ -167,7 +168,7 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
                                 val parsed = entries.map { e ->
                                     ParsedVehicle(
                                         e.vin, e.model ?: if (vm.findByVin(e.vin) == null) defaultModel else null,
-                                        null, emptyList(), "", bolsao = bolsao,
+                                        if (bolsao != null) Status.BOLSAO else null, emptyList(), "", bolsao = bolsao,
                                     )
                                 }
                                 val r = vm.importParsed(parsed, defaultModel)

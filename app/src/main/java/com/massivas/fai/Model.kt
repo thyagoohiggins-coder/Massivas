@@ -78,6 +78,8 @@ enum class Bolsao(val label: String, val keywords: List<String>) {
 enum class Status(val label: String, val color: Color) {
     PROCESSO("No processo", Color(0xFF455A64)),
     TUNEL("Túnel de liberação", Color(0xFF0277BD)),
+    /** Parado num bolsão, fora da produção (o bolsão fica em Vehicle.bolsao). */
+    BOLSAO("No bolsão", Color(0xFF8D6E63)),
     LIBERADO("Liberado ✅", Color(0xFF2E7D32));
 }
 
@@ -140,7 +142,10 @@ data class Vehicle(
                 vin = o.optString("vin"),
                 model = model,
                 color = enumOrNull<CarColor>(o.optString("color")),
-                status = enumOrNull<Status>(o.optString("status")) ?: Status.PROCESSO,
+                status = (enumOrNull<Status>(o.optString("status")) ?: Status.PROCESSO).let { st ->
+                    // versões antigas: bolsão marcado mas status "No processo"
+                    if (st == Status.PROCESSO && enumOrNull<Bolsao>(o.optString("bolsao")) != null) Status.BOLSAO else st
+                },
                 repairs = repairs,
                 forecast = if (o.has("forecast")) o.getLong("forecast") else null,
                 difficulty = enumOrNull<Difficulty>(o.optString("difficulty")),

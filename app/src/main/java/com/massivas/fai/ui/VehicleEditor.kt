@@ -136,6 +136,9 @@ fun VehicleEditor(initial: Vehicle?, vm: MainViewModel, onClose: () -> Unit) {
         if (cleaned.length < 4) {
             Toast.makeText(ctx, "Digite o VIN", Toast.LENGTH_SHORT).show(); return
         }
+        if (status == Status.BOLSAO && bolsao == null) {
+            Toast.makeText(ctx, "Escolha qual bolsão", Toast.LENGTH_SHORT).show(); return
+        }
         val base = current ?: duplicate
         val v = Vehicle(
             id = base?.id ?: vm.newId(),
@@ -248,7 +251,7 @@ fun VehicleEditor(initial: Vehicle?, vm: MainViewModel, onClose: () -> Unit) {
 
             // Estações
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SectionTitle("Estações de reparo")
+                SectionTitle(if (status == Status.BOLSAO) "Estações de reparo (opcional)" else "Estações de reparo")
                 Grid(Station.entries.toList(), columns = 2) { s, mod ->
                     val idx = repairs.indexOfFirst { it.station == s }
                     SelectTile(
@@ -272,43 +275,44 @@ fun VehicleEditor(initial: Vehicle?, vm: MainViewModel, onClose: () -> Unit) {
                 }
             }
 
-            // Bolsão (carro parado fora da produção)
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SectionTitle("Bolsão (carro parado — opcional)")
-                Grid(Bolsao.entries.toList(), columns = 2) { b, mod ->
-                    SelectTile(
-                        selected = bolsao == b,
-                        onClick = { bolsao = if (bolsao == b) null else b },
-                        modifier = mod,
-                        selectedColor = Bolsao.color,
-                        selectedContentColor = Color.White,
-                        accent = Bolsao.color,
-                    ) { c -> Text(b.label, fontWeight = FontWeight.SemiBold, color = c) }
-                }
-            }
-
-            // Status
+            // Status (Bolsão é um status: carro parado fora da produção)
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SectionTitle("Status")
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.height(IntrinsicSize.Min)) {
-                    Status.entries.forEach { s ->
-                        SelectTile(
-                            selected = status == s,
-                            onClick = { status = s },
-                            modifier = Modifier.weight(1f).fillMaxHeight(),
-                            selectedColor = s.color,
-                            selectedContentColor = Color.White,
-                        ) { c ->
-                            Text(
-                                when (s) {
-                                    Status.PROCESSO -> "No processo"
-                                    Status.TUNEL -> "Túnel"
-                                    Status.LIBERADO -> "Liberado ✅"
-                                },
-                                color = c,
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 14.sp,
-                            )
+                Grid(Status.entries.toList(), columns = 2) { s, mod ->
+                    SelectTile(
+                        selected = status == s,
+                        onClick = {
+                            status = s
+                            if (s != Status.BOLSAO) bolsao = null
+                        },
+                        modifier = mod,
+                        selectedColor = s.color,
+                        selectedContentColor = Color.White,
+                    ) { c ->
+                        Text(
+                            when (s) {
+                                Status.PROCESSO -> "No processo"
+                                Status.TUNEL -> "Túnel"
+                                Status.BOLSAO -> "🅿 Bolsão (parado)"
+                                Status.LIBERADO -> "Liberado ✅"
+                            },
+                            color = c,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                }
+                AnimatedVisibility(visible = status == Status.BOLSAO) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                        SectionTitle("Qual bolsão?")
+                        Grid(Bolsao.entries.toList(), columns = 1) { b, mod ->
+                            SelectTile(
+                                selected = bolsao == b,
+                                onClick = { bolsao = b },
+                                modifier = mod,
+                                selectedColor = Bolsao.color,
+                                selectedContentColor = Color.White,
+                                accent = Bolsao.color,
+                            ) { c -> Text(b.label, fontWeight = FontWeight.SemiBold, color = c) }
                         }
                     }
                 }

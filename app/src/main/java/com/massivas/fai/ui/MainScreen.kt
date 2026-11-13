@@ -147,7 +147,7 @@ private fun ListScreen(
     LaunchedEffect(Unit) { vm.checkOnStart() }
 
     val statusOfTab: Status? = when (statusTab) {
-        1 -> Status.PROCESSO; 2 -> Status.TUNEL; 3 -> Status.LIBERADO; else -> null
+        1 -> Status.PROCESSO; 2 -> Status.TUNEL; 3 -> Status.BOLSAO; 4 -> Status.LIBERADO; else -> null
     }
     val filtered = remember(vehicles, query, statusTab, stationFilter, modelFilter) {
         val q = normalize(query)
@@ -253,6 +253,7 @@ private fun ListScreen(
                         "Todos" to vehicles.size,
                         "Processo" to vehicles.count { it.status == Status.PROCESSO },
                         "Túnel" to vehicles.count { it.status == Status.TUNEL },
+                        "Bolsão" to vehicles.count { it.status == Status.BOLSAO },
                         "Liberados" to vehicles.count { it.status == Status.LIBERADO },
                     )
                     tabs.forEachIndexed { i, (label, count) ->
@@ -538,6 +539,7 @@ private fun VehicleCard(
                         Spacer(Modifier.weight(1f))
                         when (v.status) {
                             Status.TUNEL -> Pill(text = "TÚNEL", color = Status.TUNEL.color)
+                            Status.BOLSAO -> Unit // o bolsão aparece logo abaixo do VIN
                             Status.LIBERADO -> Pill(text = "LIBERADO ✓", color = green)
                             Status.PROCESSO -> v.difficulty?.let { Pill(text = it.label, color = it.color, textColor = it.onColor) }
                         }
@@ -607,6 +609,10 @@ private fun VehicleCard(
                                 QuickButton("← Processo", Status.PROCESSO.color, filled = false) { onStatus(Status.PROCESSO) }
                                 QuickButton("✓ Liberar", green, filled = true) { onStatus(Status.LIBERADO) }
                             }
+                            Status.BOLSAO -> {
+                                QuickButton("→ Produção", Status.PROCESSO.color, filled = false) { onStatus(Status.PROCESSO) }
+                                QuickButton("✓ Liberar", green, filled = true) { onStatus(Status.LIBERADO) }
+                            }
                             Status.LIBERADO -> {
                                 QuickButton("Desfazer liberação", Status.PROCESSO.color, filled = false) { onStatus(Status.PROCESSO) }
                             }
@@ -617,7 +623,7 @@ private fun VehicleCard(
         }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
             DropdownMenuItem(text = { Text("Editar") }, onClick = { menu = false; onClick() })
-            Status.entries.filter { it != v.status }.forEach { s ->
+            Status.entries.filter { it != v.status && it != Status.BOLSAO }.forEach { s ->
                 DropdownMenuItem(text = { Text("Marcar: ${s.label}") }, onClick = { menu = false; onStatus(s) })
             }
             DropdownMenuItem(text = { Text("Excluir", color = Color(0xFFE53935)) }, onClick = { menu = false; confirmDelete = true })
@@ -798,6 +804,7 @@ private fun ImportDialog(vm: MainViewModel, onDismiss: () -> Unit) {
                             when (p.status) {
                                 Status.TUNEL -> Pill(text = "Túnel", color = Status.TUNEL.color)
                                 Status.LIBERADO -> Pill(text = "Liberado", color = Status.LIBERADO.color)
+                                Status.BOLSAO -> Pill(text = p.bolsao?.label ?: "Bolsão", color = Status.BOLSAO.color)
                                 else -> p.repairs.firstOrNull()?.let { Pill(text = it.station.label, color = it.station.color) }
                             }
                         }

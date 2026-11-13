@@ -128,7 +128,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun delete(id: String) = persist(_vehicles.value.filterNot { it.id == id })
 
     fun setStatus(id: String, status: Status) = persist(_vehicles.value.map {
-        if (it.id == id) it.copy(status = status, updatedAt = System.currentTimeMillis()) else it
+        // sair do status Bolsão tira o carro do bolsão
+        if (it.id == id) it.copy(status = status, bolsao = if (status == Status.BOLSAO) it.bolsao else null, updatedAt = System.currentTimeMillis()) else it
     })
 
     fun toggleRepair(id: String, station: Station) = persist(_vehicles.value.map { v ->
@@ -165,7 +166,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     forecast = p.forecast ?: old.forecast,
                     difficulty = p.difficulty ?: old.difficulty,
                     color = p.color ?: old.color,
-                    bolsao = p.bolsao ?: old.bolsao,
+                    bolsao = when {
+                        p.bolsao != null -> p.bolsao
+                        p.status != null && p.status != Status.BOLSAO -> null
+                        else -> old.bolsao
+                    },
                     updatedAt = System.currentTimeMillis(),
                 )
                 updated++

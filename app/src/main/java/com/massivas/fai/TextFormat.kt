@@ -176,7 +176,7 @@ object TextFormat {
         return ParsedVehicle(
             vin = vin,
             model = model ?: headerModel,
-            status = status ?: if (anything) Status.PROCESSO else null,
+            status = status ?: if (bolsao != null) Status.BOLSAO else if (anything) Status.PROCESSO else null,
             repairs = repairs,
             notes = notes,
             forecast = forecast,
@@ -216,7 +216,8 @@ object TextFormat {
         list.forEachIndexed { i, v -> sb.append(lineFor(v, i + 1)).append("\n") }
         val released = list.count { it.status == Status.LIBERADO }
         val tunnel = list.count { it.status == Status.TUNEL }
-        sb.append("\n*Total: ${list.size}* | Liberados ✅: $released | Túnel: $tunnel | Em processo: ${list.size - released - tunnel}")
+        val parked = list.count { it.status == Status.BOLSAO }
+        sb.append("\n*Total: ${list.size}* | Liberados ✅: $released | Túnel: $tunnel | Bolsão: $parked | Em processo: ${list.size - released - tunnel - parked}")
         return sb.toString()
     }
 
@@ -224,17 +225,19 @@ object TextFormat {
         val sb = StringBuilder()
         sb.append(n).append(" - ").append(v.vin).append(" - ").append(v.model.short)
         v.color?.let { sb.append(" - ").append(it.label.uppercase()) }
-        v.bolsao?.let { sb.append(" - ").append(it.label.uppercase()) }
+        fun pending(): String {
+            val pend = v.pendingRepairs
+            return if (pend.isEmpty() && v.repairs.isNotEmpty()) "REPAROS CONCLUÍDOS"
+            else pend.joinToString(" + ") { r ->
+                r.station.label.uppercase() + if (r.note.isBlank()) "" else " (${r.note})"
+            }
+        }
         val desc = when (v.status) {
             Status.LIBERADO -> "LIBERADO ✅"
             Status.TUNEL -> "TÚNEL DE LIBERAÇÃO"
-            Status.PROCESSO -> {
-                val pend = v.pendingRepairs
-                if (pend.isEmpty() && v.repairs.isNotEmpty()) "REPAROS CONCLUÍDOS"
-                else pend.joinToString(" + ") { r ->
-                    r.station.label.uppercase() + if (r.note.isBlank()) "" else " (${r.note})"
-                }
-            }
+            Status.BOLSAO -> listOf((v.bolsao?.label ?: "Bolsão").uppercase(), v.pendingRepairs.takeIf { it.isNotEmpty() }?.let { pending() })
+                .filterNotNull().joinToString(" - ")
+            Status.PROCESSO -> pending()
         }
         if (desc.isNotEmpty()) sb.append(" - ").append(desc)
         if (v.notes.isNotBlank()) sb.append(" - ").append(v.notes)

@@ -209,6 +209,9 @@ class BolsaoTest {
             5 - VB000555 - T18 - Heliponto
         """.trimIndent()).associateBy { it.vin }
         assertEquals(Bolsao.PISTA, p["VB000111"]!!.bolsao)
+        assertEquals(Status.BOLSAO, p["VB000111"]!!.status)
+        assertEquals(Status.BOLSAO, p["VB000222"]!!.status)
+        assertEquals(Status.PROCESSO, p["VB000333"]!!.status)
         assertTrue(p["VB000111"]!!.repairs.isEmpty())
         assertEquals(Bolsao.REFEITORIO, p["VB000222"]!!.bolsao)
         assertEquals(Repair(Station.PINTURA, "risco"), p["VB000222"]!!.repairs.single())
@@ -219,8 +222,9 @@ class BolsaoTest {
 
     @Test
     fun exportsBolsao() {
-        val text = TextFormat.export(listOf(Vehicle("1", "VB000111", CarModel.C655, bolsao = Bolsao.HELIPONTO)), "X", includeDate = false)
+        val text = TextFormat.export(listOf(Vehicle("1", "VB000111", CarModel.C655, status = Status.BOLSAO, bolsao = Bolsao.HELIPONTO)), "X", includeDate = false)
         assertTrue(text.contains("1 - VB000111 - CS55 - BOLSÃO HELIPONTO"))
+        assertTrue(text.contains("Bolsão: 1"))
         assertEquals(Bolsao.HELIPONTO, TextFormat.parse(text).single().bolsao)
     }
 }
