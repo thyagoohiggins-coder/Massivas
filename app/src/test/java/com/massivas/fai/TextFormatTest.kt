@@ -228,3 +228,20 @@ class BolsaoTest {
         assertEquals(Bolsao.HELIPONTO, TextFormat.parse(text).single().bolsao)
     }
 }
+
+class TwoPrefixesTest {
+    @Test
+    fun picksClosestPrefix() {
+        val r = QuickVin.parse("BB004645 VC001234 BC000777 003333 VB005555 006666", listOf("VB", "VC"), forcePrefix = true)
+        assertEquals(
+            listOf("VB004645", "VC001234", "VC000777", "VC003333", "VB005555", "VB006666"),
+            r.entries.map { it.vin },
+        )
+    }
+
+    @Test
+    fun differentLetters() {
+        val r = QuickVin.parse("LV001111, VB002222, LB003333", listOf("VB", "LV"), forcePrefix = true)
+        assertEquals(listOf("LV001111", "VB002222", "LV003333"), r.entries.map { it.vin })
+    }
+}

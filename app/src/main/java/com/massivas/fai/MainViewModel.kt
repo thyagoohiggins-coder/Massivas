@@ -116,6 +116,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     var quickPrefix: String
         get() = prefs.getString("quickPrefix", null) ?: commonPrefix()
         set(v) { prefs.edit().putString("quickPrefix", v).apply() }
+    var quickPrefix2: String
+        get() = prefs.getString("quickPrefix2", null) ?: ""
+        set(v) { prefs.edit().putString("quickPrefix2", v).apply() }
     var quickForcePrefix: Boolean
         get() = prefs.getBoolean("quickForcePrefix", true)
         set(v) { prefs.edit().putBoolean("quickForcePrefix", v).apply() }

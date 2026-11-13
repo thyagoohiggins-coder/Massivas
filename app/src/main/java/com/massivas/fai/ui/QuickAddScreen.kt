@@ -87,9 +87,11 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
     val focus = LocalFocusManager.current
 
     var prefix by remember { mutableStateOf(vm.quickPrefix) }
+    var prefix2 by remember { mutableStateOf(vm.quickPrefix2) }
+    val prefixes = listOf(prefix, prefix2).filter { it.isNotBlank() }
     var forcePrefix by remember { mutableStateOf(vm.quickForcePrefix) }
     val digitLen = remember { vm.commonDigitLength() }
-    val result = remember(text, prefix, forcePrefix) { QuickVin.parse(text, prefix, forcePrefix, digitLen) }
+    val result = remember(text, prefix, prefix2, forcePrefix) { QuickVin.parse(text, prefixes, forcePrefix, digitLen) }
     val entries = result.entries
     fun modelOf(e: QuickVin.Entry) = e.model ?: vm.findByVin(e.vin)?.model ?: defaultModel
     val missingModel = entries.count { modelOf(it) == null }
@@ -103,7 +105,7 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
                 heard = said
                 val converted = QuickVin.convertSpeech(said)
                 if (converted.isNotBlank()) {
-                    text = QuickVin.tidy(text.trimEnd() + " " + converted, prefix, forcePrefix, digitLen)
+                    text = QuickVin.tidy(text.trimEnd() + " " + converted, listOf(prefix, prefix2), forcePrefix, digitLen)
                 }
             },
             onListening = { listening = it },
@@ -111,6 +113,7 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
         )
     }
     DisposableEffect(Unit) { onDispose { dictation.destroy() } }
+    dictation.extraBias = prefixes
 
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
         if (ok) dictation.start() else Toast.makeText(ctx, "Sem permissão do microfone", Toast.LENGTH_SHORT).show()
@@ -237,21 +240,39 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
             // Ajustes que deixam a voz bem mais precisa
             Surface(color = MaterialTheme.colorScheme.surfaceContainer, shape = RoundedCornerShape(12.dp)) {
                 Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Prefixo", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    Text("Prefixos dos VINs", fontWeight = FontWeight.SemiBold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 6.dp)) {
                         OutlinedTextField(
                             value = prefix,
                             onValueChange = { v ->
                                 prefix = v.uppercase().filter { it.isLetter() }.take(4)
                                 vm.quickPrefix = prefix
                             },
+                            label = { Text("Prefixo 1") },
                             singleLine = true,
                             textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold),
-                            modifier = Modifier.width(110.dp),
+                            modifier = Modifier.weight(1f),
+                        )
+                        OutlinedTextField(
+                            value = prefix2,
+                            onValueChange = { v ->
+                                prefix2 = v.uppercase().filter { it.isLetter() }.take(4)
+                                vm.quickPrefix2 = prefix2
+                            },
+                            label = { Text("Prefixo 2 (opcional)") },
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold),
+                            modifier = Modifier.weight(1f),
                         )
                     }
+                    Text(
+                        "O que for ouvido vira o prefixo mais parecido. Falando só os números, repete o último prefixo.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
                     OptionRow(
-                        "Sempre usar o prefixo $prefix (corrige \"BB\", \"VV\", \"bebê\"…)",
+                        "Sempre usar ${if (prefixes.size > 1) "um destes prefixos" else "o prefixo $prefix"} (corrige \"BB\", \"VV\", \"bebê\"…)",
                         forcePrefix,
                     ) { forcePrefix = it; vm.quickForcePrefix = it }
                 }
@@ -302,7 +323,7 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
                             Text(
                                 buildString {
                                     append(if (existing != null) "já existe" else "novo")
-                                    if (e.prefixAdded) append(" · prefixo $prefix")
+                                    if (e.prefixAdded) append(" · prefixo repetido")
                                     if (e.prefixFixed) append(" · letras corrigidas")
                                 },
                                 fontSize = 12.sp,

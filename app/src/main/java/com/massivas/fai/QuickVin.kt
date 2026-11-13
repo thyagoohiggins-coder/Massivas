@@ -156,7 +156,32 @@ object QuickVin {
      * @param digitLen quantos dígitos tem um VIN (ex.: 6). Ao completar, o próximo número já é outro VIN,
      *   então a "vírgula" é opcional.
      */
-    fun parse(text: String, prefix: String = "VB", forcePrefix: Boolean = false, digitLen: Int = 6): Result {
+    fun parse(text: String, prefix: String = "VB", forcePrefix: Boolean = false, digitLen: Int = 6): Result =
+        parse(text, listOf(prefix), forcePrefix, digitLen)
+
+    /** Letras iguais valem 2, letras que soam parecido (vê/bê/cê...) valem 1. */
+    private fun similarity(heard: String, p: String): Int {
+        var score = 0
+        for (i in 0 until minOf(heard.length, p.length)) {
+            score += when {
+                heard[i] == p[i] -> 2
+                heard[i] in confusable && p[i] in confusable -> 1
+                else -> -1
+            }
+        }
+        return score - 2 * kotlin.math.abs(heard.length - p.length)
+    }
+
+    private fun soundsLike(heard: String, p: String) =
+        heard.length == p.length && heard.indices.all { heard[it] == p[it] || (heard[it] in confusable && p[it] in confusable) }
+
+    /**
+     * Vários prefixos (ex.: VB e VC): as letras ouvidas viram o prefixo mais parecido.
+     * VIN falado só com números usa o último prefixo usado.
+     */
+    fun parse(text: String, prefixList: List<String>, forcePrefix: Boolean = false, digitLen: Int = 6): Result {
+        val prefixes = prefixList.map { it.trim().uppercase() }.filter { it.isNotEmpty() }.distinct()
+        val prefix = prefixes.firstOrNull() ?: ""
         val entries = LinkedHashMap<String, Entry>()
         val unknown = mutableListOf<String>()
         val unknownModels = mutableListOf<String>()
@@ -183,14 +208,17 @@ object QuickVin {
                     var fixed = false
                     val vin = if (f != null) f else {
                         var l = letters
+                        // em empate, fica o último prefixo usado
+                        fun closest(h: String) = prefixes.maxWithOrNull(
+                            compareBy<String> { similarity(h, it) }.thenBy { if (it == lastPrefix) 1 else 0 }
+                        )!!
                         when {
-                            forcePrefix && prefix.isNotEmpty() -> {
-                                if (l.isEmpty()) added = true else if (l != prefix) fixed = true
-                                l = prefix
-                            }
                             l.isEmpty() -> { l = lastPrefix; added = lastPrefix.isNotEmpty() }
-                            l != prefix && l.length == prefix.length &&
-                                l.indices.all { l[it] in confusable && prefix[it] in confusable } -> { l = prefix; fixed = true }
+                            l in prefixes -> lastPrefix = l
+                            forcePrefix && prefixes.isNotEmpty() -> { l = closest(l); fixed = true; lastPrefix = l }
+                            prefixes.any { soundsLike(l, it) } -> {
+                                l = closest(l); fixed = true; lastPrefix = l
+                            }
                             else -> lastPrefix = l
                         }
                         l + digits
@@ -236,8 +264,7 @@ object QuickVin {
                     p.all(Char::isLetter) -> {
                         val next = seg.getOrNull(i + 1)
                         // "VB"/"BB" (parecido com o prefixo) começa outro VIN, mesmo no fim de um trecho falado
-                        val prefixLike = prefix.isNotEmpty() &&
-                            (p == prefix || (p.length == prefix.length && p.all { it in confusable }))
+                        val prefixLike = prefixes.any { p == it || soundsLike(p, it) }
                         val nextIsDigits = next != null && next.all(Char::isDigit)
                         val startsVin = (p.length <= 4 && nextIsDigits && next!!.length >= 4 && model(p) == null) ||
                             (prefixLike && (next == null || nextIsDigits))
@@ -293,8 +320,11 @@ object QuickVin {
     }
 
     /** Reescreve o campo já arrumado: "VB003090, VB003940, VB004645 CS55". */
-    fun tidy(text: String, prefix: String, forcePrefix: Boolean, digitLen: Int = 6): String {
-        val out = parse(text, prefix, forcePrefix, digitLen).canonical
+    fun tidy(text: String, prefix: String, forcePrefix: Boolean, digitLen: Int = 6): String =
+        tidy(text, listOf(prefix), forcePrefix, digitLen)
+
+    fun tidy(text: String, prefixes: List<String>, forcePrefix: Boolean, digitLen: Int = 6): String {
+        val out = parse(text, prefixes, forcePrefix, digitLen).canonical
         return if (out.isNotEmpty() && text.trimEnd().endsWith(",")) "$out, " else out
     }
 

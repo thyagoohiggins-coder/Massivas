@@ -27,10 +27,14 @@ class VoiceDictation(
 
     val available: Boolean get() = SpeechRecognizer.isRecognitionAvailable(ctx)
 
-    private val bias = arrayListOf(
+    /** Prefixos escolhidos na tela, enviados como dica ao reconhecedor. */
+    var extraBias: List<String> = emptyList()
+
+    private val baseBias = listOf(
         "vírgula", "VB", "CS55", "C928", "CS75", "Uni-T", "Tiggo 7", "Tiggo 7 Ice Low", "Tiggo 5", "Tiggo 8",
         "T1E", "T18", "T19", "S202", "C655", "zero", "Ice Low", "ADAS",
     )
+    private val bias: ArrayList<String> get() = ArrayList(baseBias + extraBias)
 
     fun start() {
         if (active) return
