@@ -261,3 +261,32 @@ class CompareTest {
         assertEquals(listOf("VB001778", "VB000433"), VinCompare.vinsFromText("vb001778, 000433", listOf("VB"), true))
     }
 }
+
+class SpokenColorTest {
+    @Test
+    fun detectsColor() {
+        val r = QuickVin.parse("VB000013 C928, VB001433 CS55 azul, VB003940 UNI-T branco, VB004000 preta T18, VB005000 cinza", "VB", true)
+        val byVin = r.entries.associateBy { it.vin }
+        assertEquals(null, byVin["VB000013"]!!.color)
+        assertEquals(CarColor.AZUL, byVin["VB001433"]!!.color)
+        assertEquals(CarModel.C655, byVin["VB001433"]!!.model)
+        assertEquals(CarColor.BRANCO, byVin["VB003940"]!!.color)
+        assertEquals(CarModel.S202, byVin["VB003940"]!!.model)
+        assertEquals(CarColor.PRETO, byVin["VB004000"]!!.color)
+        assertEquals(CarModel.T18, byVin["VB004000"]!!.model)
+        assertEquals(CarColor.CINZA, byVin["VB005000"]!!.color)
+        assertTrue(r.canonical.contains("VB003940 UNI-T BRANCO"))
+    }
+
+    @Test
+    fun spokenWithoutComma() {
+        var text = ""
+        for (said in listOf("VB zero zero três nove quatro zero uni tê branco", "VB zero zero quatro seis quatro cinco azul")) {
+            text = QuickVin.tidy(text.trimEnd() + " " + QuickVin.convertSpeech(said), "VB", true, 6)
+        }
+        val r = QuickVin.parse(text, "VB", true, 6)
+        assertEquals(listOf("VB003940", "VB004645"), r.entries.map { it.vin })
+        assertEquals(CarColor.BRANCO, r.entries[0].color)
+        assertEquals(CarColor.AZUL, r.entries[1].color)
+    }
+}

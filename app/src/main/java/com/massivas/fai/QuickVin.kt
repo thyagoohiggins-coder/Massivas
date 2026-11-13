@@ -15,6 +15,7 @@ object QuickVin {
         val prefixAdded: Boolean,
         val prefixFixed: Boolean = false,
         val padded: Boolean = false,
+        val color: CarColor? = null,
     )
     data class Result(
         val entries: List<Entry>,
@@ -148,6 +149,13 @@ object QuickVin {
         return out.toString()
     }
 
+    private val colorWords = mapOf(
+        "AZUL" to CarColor.AZUL,
+        "CINZA" to CarColor.CINZA, "CINZENTO" to CarColor.CINZA, "CINZENTA" to CarColor.CINZA, "PRATA" to CarColor.CINZA,
+        "PRETO" to CarColor.PRETO, "PRETA" to CarColor.PRETO,
+        "BRANCO" to CarColor.BRANCO, "BRANCA" to CarColor.BRANCO,
+    )
+
     private fun isFull(p: String) = p.length == 17 && p.any(Char::isDigit) && p.any(Char::isLetter)
 
     /**
@@ -192,6 +200,7 @@ object QuickVin {
         var digits = ""
         var full: String? = null
         val rest = StringBuilder()
+        var color: CarColor? = null
 
         fun model(r0: String): CarModel? {
             val r = r0.replace("TIGUO", "TIGGO").replace(Regex("TIGO(?!O)"), "TIGGO")
@@ -225,9 +234,12 @@ object QuickVin {
                     }
                     val m = model(rest.toString())
                     if (rest.isNotEmpty() && m == null) unknownModels += "$vin: $rest"
-                    if (vin !in entries) entries[vin] = Entry(vin, m, added, fixed)
-                    else if (m != null) entries[vin] = entries.getValue(vin).copy(model = m)
-                    canonical += if (m != null) "$vin ${m.short}" else vin
+                    if (vin !in entries) entries[vin] = Entry(vin, m, added, fixed, color = color)
+                    else {
+                        val old = entries.getValue(vin)
+                        entries[vin] = old.copy(model = m ?: old.model, color = color ?: old.color)
+                    }
+                    canonical += listOfNotNull(vin, m?.short, color?.label?.uppercase()).joinToString(" ")
                 }
                 letters.isNotEmpty() || digits.isNotEmpty() || rest.isNotEmpty() -> {
                     val raw = listOf(letters, digits, rest.toString()).filter { it.isNotEmpty() }.joinToString(" ")
@@ -235,7 +247,7 @@ object QuickVin {
                     canonical += raw
                 }
             }
-            letters = ""; digits = ""; full = null; rest.setLength(0)
+            letters = ""; digits = ""; full = null; rest.setLength(0); color = null
         }
 
         fun startDigits(p: String) {
@@ -254,13 +266,16 @@ object QuickVin {
             val seg = mutableListOf<String>()
             for (p in seg0) {
                 val last = seg.lastOrNull()
-                if (last != null && !isFull(p) && !isFull(last) && p.all(Char::isLetter) && last.all(Char::isLetter)) seg[seg.lastIndex] = last + p
+                if (last != null && !isFull(p) && !isFull(last) && p.all(Char::isLetter) && last.all(Char::isLetter) &&
+                    p !in colorWords && last !in colorWords
+                ) seg[seg.lastIndex] = last + p
                 else seg += p
             }
             for ((i, p) in seg.withIndex()) {
                 val hasVin = full != null || digits.isNotEmpty()
                 when {
                     isFull(p) -> { if (hasVin || letters.isNotEmpty()) finish(); full = p }
+                    p in colorWords -> color = colorWords.getValue(p)
                     p.all(Char::isLetter) -> {
                         val next = seg.getOrNull(i + 1)
                         // "VB"/"BB" (parecido com o prefixo) começa outro VIN, mesmo no fim de um trecho falado

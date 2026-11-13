@@ -191,7 +191,7 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
                                 val parsed = entries.map { e ->
                                     ParsedVehicle(
                                         e.vin, e.model ?: if (vm.findByVin(e.vin) == null) defaultModel else null,
-                                        if (bolsao != null) Status.BOLSAO else null, emptyList(), "", bolsao = bolsao,
+                                        if (bolsao != null) Status.BOLSAO else null, emptyList(), "", color = e.color, bolsao = bolsao,
                                     )
                                 }
                                 val r = vm.importParsed(parsed, defaultModel)
@@ -220,9 +220,9 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
                 Column(Modifier.padding(12.dp)) {
                     Text("Digite ou fale os VINs separados por vírgula", fontWeight = FontWeight.Bold)
                     Text(
-                        "O modelo depois do VIN é opcional.\n" +
+                        "O modelo e a cor (azul, cinza, preto, branco) depois do VIN são opcionais.\n" +
                             "Digitando: VB001778 CS55, VB000433 C928, VB004163\n" +
-                            "Falando: \"VB zero zero um sete sete oito CS cinquenta e cinco, VB zero zero zero quatro três três…\"\n" +
+                            "Falando: \"VB zero zero um sete sete oito CS cinquenta e cinco azul, VB zero zero zero quatro três três…\"\n" +
                             "Quando o VIN completa $digitLen dígitos ou você fala outro VB, o app já passa para o próximo. " +
                             "Pode pausar no meio do código; \"vírgula\" também separa.",
                         fontSize = 13.sp,
@@ -339,6 +339,11 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
                             Spacer(Modifier.width(8.dp))
                             if (m != null) Pill(text = m.label, color = MaterialTheme.colorScheme.primary, textColor = MaterialTheme.colorScheme.onPrimary)
                             else Pill(text = "sem modelo", color = Color(0xFF78909C))
+                            e.color?.let {
+                                Spacer(Modifier.width(6.dp))
+                                ColorDot(it, 14)
+                                Text(" ${it.label}", fontSize = 12.sp)
+                            }
                             Spacer(Modifier.width(6.dp))
                             Text(
                                 buildString {
