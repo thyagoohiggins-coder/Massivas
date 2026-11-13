@@ -4,7 +4,7 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
-fun env(name: String): String? = System.getenv(name)?.takeIf { it.isNotBlank() }
+fun env(name: String): String? = System.getenv(name)?.trim()?.takeIf { it.isNotEmpty() }
 
 android {
     namespace = "com.massivas.fai"
