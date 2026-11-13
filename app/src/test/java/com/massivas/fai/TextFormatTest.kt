@@ -319,3 +319,17 @@ class SpokenStationTest {
         assertEquals(listOf(Station.AVALIACAO_QA, Station.ILHA_SING_OFF), r["VB006000"]!!.stations)
     }
 }
+
+class RepeatedDigitsTest {
+    @Test
+    fun multipliers() {
+        assertEquals("VB001778", QuickVin.parse(QuickVin.convertSpeech("vê bê duplo zero um duplo sete oito"), "VB", true).entries.single().vin)
+        assertEquals("VB000433", QuickVin.parse(QuickVin.convertSpeech("VB três zeros quatro duplo três"), "VB", true).entries.single().vin)
+        assertEquals("VB005551", QuickVin.parse(QuickVin.convertSpeech("VB dois zeros triplo cinco um"), "VB", true).entries.single().vin)
+    }
+
+    @Test
+    fun prefersMoreDigits() {
+        assertTrue(QuickVin.score("VB 0 0 1 7 7 8") > QuickVin.score("VB 0 1 7 8"))
+    }
+}

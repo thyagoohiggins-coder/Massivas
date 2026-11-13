@@ -42,6 +42,7 @@ object QuickVin {
         "QUINHENTOS" to 500, "SEISCENTOS" to 600, "SETECENTOS" to 700, "OITOCENTOS" to 800, "NOVECENTOS" to 900,
     )
     private const val MIL = "MIL"
+    private val multipliers = mapOf("DUPLO" to 2, "DUPLA" to 2, "DOBRADO" to 2, "TRIPLO" to 3, "TRIPLA" to 3)
 
     /** Nome falado das letras (sem acento). I, O e Q não existem em VIN. */
     private val letterNames = mapOf(
@@ -94,8 +95,22 @@ object QuickVin {
         var i = 0
         while (i < tokens.size) {
             val t = tokens[i]
+            val next = tokens.getOrNull(i + 1)
             when {
                 t in separators -> segs += mutableListOf<String>()
+                // "duplo zero" → 00, "triplo cinco" → 555
+                t in multipliers && next != null && (next in units || next.all(Char::isDigit)) -> {
+                    val d = if (next in units) units.getValue(next).toString() else next
+                    segs.last() += d.repeat(multipliers.getValue(t))
+                    i += 2
+                    continue
+                }
+                // "dois zeros" / "três zeros" → 00 / 000
+                t in units && next == "ZEROS" -> {
+                    segs.last() += "0".repeat(units.getValue(t))
+                    i += 2
+                    continue
+                }
                 isNumberWord(t) -> {
                     // junta uma sequência de números falados ("dois mil e trinta e cinco", "zero zero um")
                     val run = mutableListOf(t)
@@ -407,6 +422,8 @@ object QuickVin {
     /** Quantos VINs um texto falado gera (para escolher a melhor alternativa do reconhecedor). */
     fun score(text: String): Int {
         val r = parse(text)
-        return r.entries.size * 10 + r.entries.count { it.model != null } * 2 - r.unknown.size * 5 - r.unknownModels.size * 3
+        // em empate, prefere a alternativa com mais dígitos (o Google às vezes "engole" números repetidos)
+        val digits = convertSpeech(text).count { it.isDigit() }
+        return r.entries.size * 10 + r.entries.count { it.model != null } * 2 - r.unknown.size * 5 - r.unknownModels.size * 3 + digits
     }
 }

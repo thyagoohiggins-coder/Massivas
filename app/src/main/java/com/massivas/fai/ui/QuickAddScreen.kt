@@ -225,6 +225,7 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
                     Text("Digite ou fale os VINs separados por vírgula", fontWeight = FontWeight.Bold)
                     Text(
                         "Depois do VIN pode falar (opcional): modelo, cor, estação (pintura, ex ok, polimento…), bolsão, túnel ou liberado.\n" +
+                            "Números repetidos: \"duplo zero\" = 00, \"triplo cinco\" = 555, \"três zeros\" = 000.\n" +
                             "Digitando: VB001778 CS55, VB000433 C928, VB004163\n" +
                             "Falando: \"VB zero zero um sete sete oito CS cinquenta e cinco azul, VB zero zero zero quatro três três…\"\n" +
                             "Quando o VIN completa $digitLen dígitos ou você fala outro VB, o app já passa para o próximo. " +
@@ -359,6 +360,8 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
                                     append(if (existing != null) "já existe" else "novo")
                                     if (e.prefixAdded) append(" · prefixo repetido")
                                     if (e.prefixFixed) append(" · letras corrigidas")
+                                    val nd = e.vin.dropWhile { it.isLetter() }.length
+                                    if (e.vin.length != 17 && nd < digitLen) append(" · ⚠ só $nd dígitos")
                                 },
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
