@@ -94,6 +94,7 @@ import com.massivas.fai.normalize
 import com.massivas.fai.vinComparator
 
 private const val NEW = "__new__"
+private const val QUICK = "__quick__"
 
 @Composable
 fun MainScreen(vm: MainViewModel = viewModel()) {
@@ -101,7 +102,9 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
     var editorId by rememberSaveable { mutableStateOf<String?>(null) }
 
     val id = editorId
-    if (id != null) {
+    if (id == QUICK) {
+        QuickAddScreen(vm = vm, onClose = { editorId = null })
+    } else if (id != null) {
         val initial = if (id == NEW) null else vehicles.firstOrNull { it.id == id }
         VehicleEditor(initial = initial, vm = vm, onClose = { editorId = null })
     } else {
@@ -109,6 +112,7 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
             vm = vm,
             vehicles = vehicles,
             onAdd = { editorId = NEW },
+            onQuickAdd = { editorId = QUICK },
             onEdit = { editorId = it.id },
         )
     }
@@ -116,7 +120,13 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-private fun ListScreen(vm: MainViewModel, vehicles: List<Vehicle>, onAdd: () -> Unit, onEdit: (Vehicle) -> Unit) {
+private fun ListScreen(
+    vm: MainViewModel,
+    vehicles: List<Vehicle>,
+    onAdd: () -> Unit,
+    onQuickAdd: () -> Unit,
+    onEdit: (Vehicle) -> Unit,
+) {
     val ctx = LocalContext.current
     val update by vm.update.collectAsStateWithLifecycle()
 
@@ -203,6 +213,9 @@ private fun ListScreen(vm: MainViewModel, vehicles: List<Vehicle>, onAdd: () -> 
                         Box {
                             IconButton(onClick = { menuOpen = true }) { Icon(Icons.Filled.MoreVert, "Menu") }
                             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                                DropdownMenuItem(text = { Text("Vários VINs (digitar ou falar)") }, onClick = {
+                                    menuOpen = false; onQuickAdd()
+                                })
                                 DropdownMenuItem(text = { Text("Colar lista do WhatsApp") }, onClick = {
                                     menuOpen = false; importOpen = true
                                 })
@@ -255,18 +268,27 @@ private fun ListScreen(vm: MainViewModel, vehicles: List<Vehicle>, onAdd: () -> 
             }
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = onAdd,
-                icon = { Icon(Icons.Filled.Add, null) },
-                text = { Text("Adicionar VIN", fontWeight = FontWeight.Bold) },
-                containerColor = MaterialTheme.colorScheme.secondary,
-                contentColor = MaterialTheme.colorScheme.onSecondary,
-            )
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                ExtendedFloatingActionButton(
+                    onClick = onQuickAdd,
+                    icon = { Text("🎤", fontSize = 18.sp) },
+                    text = { Text("Vários VINs") },
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+                ExtendedFloatingActionButton(
+                    onClick = onAdd,
+                    icon = { Icon(Icons.Filled.Add, null) },
+                    text = { Text("Adicionar VIN", fontWeight = FontWeight.Bold) },
+                    containerColor = MaterialTheme.colorScheme.secondary,
+                    contentColor = MaterialTheme.colorScheme.onSecondary,
+                )
+            }
         },
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(bottom = 100.dp),
+            contentPadding = PaddingValues(bottom = 170.dp),
         ) {
             // Filtro por modelo + estação
             item {
@@ -329,6 +351,7 @@ private fun ListScreen(vm: MainViewModel, vehicles: List<Vehicle>, onAdd: () -> 
                     EmptyState(
                         hasVehicles = vehicles.isNotEmpty(),
                         onAdd = onAdd,
+                        onQuickAdd = onQuickAdd,
                         onImport = { importOpen = true },
                         onClearFilters = {
                             statusTab = 0; stationFilter = null; modelFilter = null; query = ""; searching = false
@@ -426,7 +449,13 @@ private fun selectedPrimary() = FilterChipDefaults.filterChipColors(
 )
 
 @Composable
-private fun EmptyState(hasVehicles: Boolean, onAdd: () -> Unit, onImport: () -> Unit, onClearFilters: () -> Unit) {
+private fun EmptyState(
+    hasVehicles: Boolean,
+    onAdd: () -> Unit,
+    onQuickAdd: () -> Unit,
+    onImport: () -> Unit,
+    onClearFilters: () -> Unit,
+) {
     Column(
         Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 48.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -443,6 +472,7 @@ private fun EmptyState(hasVehicles: Boolean, onAdd: () -> Unit, onImport: () -> 
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Button(onClick = onAdd, modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Adicionar VIN") }
+            OutlinedButton(onClick = onQuickAdd, modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("🎤  Vários VINs (digitar ou falar)") }
             OutlinedButton(onClick = onImport, modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Colar lista do WhatsApp") }
         }
     }

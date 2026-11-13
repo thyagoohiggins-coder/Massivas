@@ -103,3 +103,43 @@ class NumberedFormatTest {
         assertEquals(Status.TUNEL, back["VB003940"]!!.status)
     }
 }
+
+class QuickVinTest {
+    @Test
+    fun typedList() {
+        val r = QuickVin.parse("VB001778 cs55, VB000433 C928, vb004163, 3940 uni-t")
+        assertEquals(listOf("VB001778", "VB000433", "VB004163", "VB003940").take(3), r.entries.take(3).map { it.vin })
+        assertEquals(CarModel.C655, r.entries[0].model)
+        assertEquals(CarModel.C928, r.entries[1].model)
+        assertEquals(null, r.entries[2].model)
+        assertEquals("VB3940", r.entries[3].vin)
+        assertTrue(r.entries[3].prefixAdded)
+        assertEquals(CarModel.S202, r.entries[3].model)
+    }
+
+    @Test
+    fun spokenDigits() {
+        val r = QuickVin.parse("vê bê zero zero um sete sete oito cs cinquenta e cinco vírgula VB zero zero zero quatro três três c novecentos e vinte e oito vírgula")
+        assertEquals(2, r.entries.size)
+        assertEquals("VB001778", r.entries[0].vin)
+        assertEquals(CarModel.C655, r.entries[0].model)
+        assertEquals("VB000433", r.entries[1].vin)
+        assertEquals(CarModel.C928, r.entries[1].model)
+    }
+
+    @Test
+    fun spokenComposite() {
+        val r = QuickVin.parse("VB zero zero mil setecentos e setenta e oito tiggo sete ice low, VB zero zero dois mil e trinta e cinco T dezoito, VB 006263 uni tê")
+        assertEquals("VB001778", r.entries[0].vin)
+        assertEquals(CarModel.T1E_ICE_LOW, r.entries[0].model)
+        assertEquals("VB002035", r.entries[1].vin)
+        assertEquals(CarModel.T18, r.entries[1].model)
+        assertEquals("VB006263", r.entries[2].vin)
+        assertEquals(CarModel.S202, r.entries[2].model)
+    }
+
+    @Test
+    fun normalize() {
+        assertEquals("VB001778 CS55, VB000433", QuickVin.normalizeSpeech("v b 001778 CS 55 vírgula vb 000433"))
+    }
+}

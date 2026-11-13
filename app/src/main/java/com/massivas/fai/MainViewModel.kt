@@ -101,6 +101,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         persist(list)
     }
 
+    /** Prefixo de letras mais comum nos VINs cadastrados (ex.: "VB"). */
+    fun commonPrefix(): String =
+        _vehicles.value.map { it.vin.takeWhile { c -> c.isLetter() } }
+            .filter { it.isNotEmpty() && it.length <= 4 }
+            .groupingBy { it }.eachCount().maxByOrNull { it.value }?.key ?: "VB"
+
     fun newId(): String = UUID.randomUUID().toString()
 
     fun delete(id: String) = persist(_vehicles.value.filterNot { it.id == id })

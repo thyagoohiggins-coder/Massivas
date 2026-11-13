@@ -30,7 +30,6 @@ object TextFormat {
 
     // VB001778 (letras + números) ou VIN completo de 17 caracteres.
     private val vinRegex = Regex("(?<![A-Za-z0-9])([A-Za-z]{1,4}[0-9]{5,13}|[A-HJ-NPR-Za-hj-npr-z0-9]{17})(?![A-Za-z0-9])")
-    private val indexPrefix = Regex("^[\\s\\d*•#.)(\\-–—:]*$")
     private val forecastRegex = Regex("(?:⏱|PREV\\.?|PREVISAO:?)\\s*(\\d{1,2})/(\\d{1,2})(?:/\\d{2,4})?\\s+(\\d{1,2})[:h](\\d{2})", RegexOption.IGNORE_CASE)
 
     private fun wordRegex(kw: String) =
@@ -55,7 +54,10 @@ object TextFormat {
             if (vinMatch != null) {
                 val before = line.substring(0, vinMatch.range.first)
                 val after = line.substring(vinMatch.range.last + 1)
-                val rest = if (indexPrefix.matches(before)) after else "$before $after"
+                // "🟠 33 - VB000957 ...": número da linha e emoji de nível antes do VIN.
+                val rest = if (before.none { it.isLetter() }) {
+                    Difficulty.entries.filter { before.contains(it.emoji) }.joinToString(" ") { it.emoji } + " " + after
+                } else "$before $after"
                 out += parseVehicle(cleanVin(vinMatch.value), rest, currentModel)
                 continue
             }
@@ -66,7 +68,7 @@ object TextFormat {
                 continue
             }
             val n = normalize(line)
-            if (n.startsWith("MASSIVA") || n.startsWith("TOTAL")) continue
+            if (n.startsWith("MASSIVA") || n.startsWith("TOTAL") || n.startsWith("LEGENDA")) continue
             // Linha de continuação: junta ao último reparo/observação.
             val last = out.lastOrNull() ?: continue
             out[out.lastIndex] = if (last.repairs.isNotEmpty()) {
@@ -175,6 +177,8 @@ object TextFormat {
 
     fun formatDate(ms: Long): String = dateFmt.format(Date(ms))
 
+    const val LEGEND = "Legenda: 🟡 Fácil | 🟠 Médio | 🔴 Difícil | ⏱ Previsão | ✅ Liberado"
+
     /** Gera o texto para o WhatsApp, no formato numerado. */
     fun export(
         vehicles: List<Vehicle>,
@@ -188,13 +192,18 @@ object TextFormat {
         val sb = StringBuilder()
         if (title.isNotBlank()) sb.append("*").append(title.trim()).append("*\n")
         if (includeDate) sb.append(SimpleDateFormat("dd/MM/yyyy HH:mm", ptBR).format(Date())).append("\n")
-        if (sb.isNotEmpty()) sb.append("\n")
-        list.forEachIndexed { i, v -> sb.append(i + 1).append(" - ").append(lineFor(v)).append("\n") }
-        return sb.toString().trimEnd()
+        sb.append(LEGEND).append("\n\n")
+        list.forEachIndexed { i, v -> sb.append(lineFor(v, i + 1)).append("\n") }
+        val released = list.count { it.status == Status.LIBERADO }
+        val tunnel = list.count { it.status == Status.TUNEL }
+        sb.append("\n*Total: ${list.size}* | Liberados ✅: $released | Túnel: $tunnel | Em processo: ${list.size - released - tunnel}")
+        return sb.toString()
     }
 
-    private fun lineFor(v: Vehicle): String {
-        val sb = StringBuilder(v.vin).append(" - ").append(v.model.short)
+    private fun lineFor(v: Vehicle, n: Int): String {
+        val sb = StringBuilder()
+        if (v.status != Status.LIBERADO) v.difficulty?.let { sb.append(it.emoji).append(" ") }
+        sb.append(n).append(" - ").append(v.vin).append(" - ").append(v.model.short)
         val desc = when (v.status) {
             Status.LIBERADO -> "LIBERADO ✅"
             Status.TUNEL -> "TÚNEL DE LIBERAÇÃO"
@@ -202,16 +211,13 @@ object TextFormat {
                 val pend = v.pendingRepairs
                 if (pend.isEmpty() && v.repairs.isNotEmpty()) "REPAROS CONCLUÍDOS"
                 else pend.joinToString(" + ") { r ->
-                    r.station.label.uppercase() + if (r.note.isBlank()) "" else "(${r.note})"
+                    r.station.label.uppercase() + if (r.note.isBlank()) "" else " (${r.note})"
                 }
             }
         }
         if (desc.isNotEmpty()) sb.append(" - ").append(desc)
         if (v.notes.isNotBlank()) sb.append(" - ").append(v.notes)
-        if (v.status != Status.LIBERADO) {
-            v.forecast?.let { sb.append(" ⏱ ").append(formatDate(it)) }
-            v.difficulty?.let { sb.append(" ").append(it.emoji) }
-        }
+        if (v.status != Status.LIBERADO) v.forecast?.let { sb.append(" | ⏱ ").append(formatDate(it)) }
         return sb.toString()
     }
 }
