@@ -197,3 +197,30 @@ class VoiceFixesTest {
         assertEquals(CarModel.S202, r.entries[1].model)
     }
 }
+
+class BolsaoTest {
+    @Test
+    fun parsesBolsaoAndNewStations() {
+        val p = TextFormat.parse("""
+            1 - VB000111 - CS55 - BOLSÃO PISTA
+            2 - VB000222 - C928 - Bolsão do Refeitório - PINTURA (risco)
+            3 - VB000333 - UNI-T - VAGA DE SHOWER
+            4 - VB000444 - T18 - ILHA SING OFF (faltando etiqueta)
+            5 - VB000555 - T18 - Heliponto
+        """.trimIndent()).associateBy { it.vin }
+        assertEquals(Bolsao.PISTA, p["VB000111"]!!.bolsao)
+        assertTrue(p["VB000111"]!!.repairs.isEmpty())
+        assertEquals(Bolsao.REFEITORIO, p["VB000222"]!!.bolsao)
+        assertEquals(Repair(Station.PINTURA, "risco"), p["VB000222"]!!.repairs.single())
+        assertEquals(Station.AVALIACAO_QA, p["VB000333"]!!.repairs.single().station)
+        assertEquals(Repair(Station.ILHA_SING_OFF, "faltando etiqueta"), p["VB000444"]!!.repairs.single())
+        assertEquals(Bolsao.HELIPONTO, p["VB000555"]!!.bolsao)
+    }
+
+    @Test
+    fun exportsBolsao() {
+        val text = TextFormat.export(listOf(Vehicle("1", "VB000111", CarModel.C655, bolsao = Bolsao.HELIPONTO)), "X", includeDate = false)
+        assertTrue(text.contains("1 - VB000111 - CS55 - BOLSÃO HELIPONTO"))
+        assertEquals(Bolsao.HELIPONTO, TextFormat.parse(text).single().bolsao)
+    }
+}

@@ -69,6 +69,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.massivas.fai.Bolsao
 import com.massivas.fai.CarColor
 import com.massivas.fai.CarModel
 import com.massivas.fai.Difficulty
@@ -97,6 +98,7 @@ fun VehicleEditor(initial: Vehicle?, vm: MainViewModel, onClose: () -> Unit) {
     var forecast by remember { mutableStateOf(initial?.forecast) }
     var difficulty by remember { mutableStateOf(initial?.difficulty) }
     var notes by remember { mutableStateOf(initial?.notes ?: "") }
+    var bolsao by remember { mutableStateOf(initial?.bolsao) }
     var moreOpen by remember {
         mutableStateOf(initial != null && (initial.color != null || initial.forecast != null || initial.difficulty != null || initial.notes.isNotBlank()))
     }
@@ -124,6 +126,7 @@ fun VehicleEditor(initial: Vehicle?, vm: MainViewModel, onClose: () -> Unit) {
         difficulty = null
         notes = ""
         color = null
+        bolsao = null
         modelTouched = false
         vinFocus.requestFocus()
     }
@@ -144,6 +147,7 @@ fun VehicleEditor(initial: Vehicle?, vm: MainViewModel, onClose: () -> Unit) {
             forecast = forecast,
             difficulty = difficulty,
             notes = notes.trim(),
+            bolsao = bolsao,
             createdAt = base?.createdAt ?: System.currentTimeMillis(),
         )
         vm.save(v)
@@ -265,6 +269,21 @@ fun VehicleEditor(initial: Vehicle?, vm: MainViewModel, onClose: () -> Unit) {
                         onNote = { repairs[i] = r.copy(note = it) },
                         onDone = { repairs[i] = r.copy(done = it) },
                     )
+                }
+            }
+
+            // Bolsão (carro parado fora da produção)
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SectionTitle("Bolsão (carro parado — opcional)")
+                Grid(Bolsao.entries.toList(), columns = 2) { b, mod ->
+                    SelectTile(
+                        selected = bolsao == b,
+                        onClick = { bolsao = if (bolsao == b) null else b },
+                        modifier = mod,
+                        selectedColor = Bolsao.color,
+                        selectedContentColor = Color.White,
+                        accent = Bolsao.color,
+                    ) { c -> Text(b.label, fontWeight = FontWeight.SemiBold, color = c) }
                 }
             }
 

@@ -65,6 +65,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import com.massivas.fai.Bolsao
 import com.massivas.fai.CarModel
 import com.massivas.fai.MainViewModel
 import com.massivas.fai.ParsedVehicle
@@ -78,6 +79,7 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
     val ctx = LocalContext.current
     var text by rememberSaveable { mutableStateOf("") }
     var defaultModel by remember { mutableStateOf<CarModel?>(null) }
+    var bolsao by remember { mutableStateOf<Bolsao?>(null) }
     var listening by remember { mutableStateOf(false) }
     var partial by remember { mutableStateOf("") }
     var heard by remember { mutableStateOf("") }
@@ -163,7 +165,10 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
                             onClick = {
                                 if (listening) dictation.stop()
                                 val parsed = entries.map { e ->
-                                    ParsedVehicle(e.vin, e.model ?: if (vm.findByVin(e.vin) == null) defaultModel else null, null, emptyList(), "")
+                                    ParsedVehicle(
+                                        e.vin, e.model ?: if (vm.findByVin(e.vin) == null) defaultModel else null,
+                                        null, emptyList(), "", bolsao = bolsao,
+                                    )
                                 }
                                 val r = vm.importParsed(parsed, defaultModel)
                                 Toast.makeText(ctx, "${r.added} adicionados, ${r.updated} atualizados", Toast.LENGTH_LONG).show()
@@ -264,6 +269,20 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
                             Text(m.code, fontSize = 11.sp, color = c.copy(alpha = 0.75f))
                         }
                     }
+                }
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SectionTitle("Bolsão para todos (opcional)")
+                Grid(Bolsao.entries.toList(), columns = 2) { b, mod ->
+                    SelectTile(
+                        selected = bolsao == b,
+                        onClick = { bolsao = if (bolsao == b) null else b },
+                        modifier = mod,
+                        selectedColor = Bolsao.color,
+                        selectedContentColor = Color.White,
+                        accent = Bolsao.color,
+                    ) { c -> Text(b.label, fontWeight = FontWeight.SemiBold, color = c) }
                 }
             }
 

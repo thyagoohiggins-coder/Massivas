@@ -82,6 +82,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.massivas.fai.Bolsao
 import com.massivas.fai.BuildConfig
 import com.massivas.fai.CarModel
 import com.massivas.fai.MainViewModel
@@ -153,7 +154,9 @@ private fun ListScreen(
         vehicles.filter { v ->
             (statusOfTab == null || v.status == statusOfTab) &&
                 (modelFilter == null || v.model.name == modelFilter) &&
-                (stationFilter == null || v.pendingRepairs.any { it.station.name == stationFilter }) &&
+                (stationFilter == null ||
+                    (stationFilter!!.startsWith("B:") && v.bolsao?.name == stationFilter!!.removePrefix("B:")) ||
+                    v.pendingRepairs.any { it.station.name == stationFilter }) &&
                 (q.isEmpty() || v.vin.contains(q.replace(" ", "")) ||
                     normalize(v.notes).contains(q) || v.repairs.any { normalize(it.note).contains(q) })
         }
@@ -298,15 +301,16 @@ private fun ListScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Box {
-                        val st = stationFilter?.let { n -> Station.entries.first { it.name == n } }
+                        val st = stationFilter?.let { n -> Station.entries.firstOrNull { it.name == n } }
+                        val bo = stationFilter?.takeIf { it.startsWith("B:") }?.let { n -> Bolsao.entries.firstOrNull { "B:" + it.name == n } }
                         FilterChip(
-                            selected = st != null,
+                            selected = st != null || bo != null,
                             onClick = { stationMenu = true },
-                            label = { Text(st?.label ?: "Estação") },
+                            label = { Text(st?.label ?: bo?.label ?: "Estação / Bolsão") },
                             leadingIcon = if (st != null) { { ColorDotRaw(Color.White, 10) } } else null,
                             trailingIcon = { Icon(Icons.Filled.ArrowDropDown, null) },
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = st?.color ?: MaterialTheme.colorScheme.primary,
+                                selectedContainerColor = st?.color ?: if (bo != null) Bolsao.color else MaterialTheme.colorScheme.primary,
                                 selectedLabelColor = Color.White,
                                 selectedTrailingIconColor = Color.White,
                             ),
@@ -321,6 +325,15 @@ private fun ListScreen(
                                     leadingIcon = { ColorDotRaw(s.color, 14) },
                                     text = { Text(if (count > 0) "${s.label}  ($count)" else s.label) },
                                     onClick = { stationFilter = s.name; stationMenu = false },
+                                )
+                            }
+                            HorizontalDivider()
+                            Bolsao.entries.forEach { b ->
+                                val count = vehicles.count { it.bolsao == b }
+                                DropdownMenuItem(
+                                    leadingIcon = { ColorDotRaw(Bolsao.color, 14) },
+                                    text = { Text(if (count > 0) "${b.label}  ($count)" else b.label) },
+                                    onClick = { stationFilter = "B:" + b.name; stationMenu = false },
                                 )
                             }
                         }
@@ -528,6 +541,11 @@ private fun VehicleCard(
                             Status.LIBERADO -> Pill(text = "LIBERADO ✓", color = green)
                             Status.PROCESSO -> v.difficulty?.let { Pill(text = it.label, color = it.color, textColor = it.onColor) }
                         }
+                    }
+
+                    v.bolsao?.let {
+                        Spacer(Modifier.height(6.dp))
+                        Pill(text = "🅿 ${it.label}", color = Bolsao.color)
                     }
 
                     // Reparos: toque para marcar como feito

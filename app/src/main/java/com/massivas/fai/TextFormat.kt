@@ -14,6 +14,7 @@ data class ParsedVehicle(
     val forecast: Long? = null,
     val difficulty: Difficulty? = null,
     val color: CarColor? = null,
+    val bolsao: Bolsao? = null,
 )
 
 /**
@@ -119,6 +120,13 @@ object TextFormat {
             remove(it.range)
         }
 
+        // Bolsão (antes das estações: "Bolsão Pista" não é "Reparo de Pista")
+        var bolsao: Bolsao? = null
+        loop@ for (b in Bolsao.entries) for (kw in b.keywords) {
+            val m = wordRegex(kw).find(folded) ?: continue
+            bolsao = b; remove(m.range); break@loop
+        }
+
         // Cor do veículo
         var color: CarColor? = null
         for (c in CarColor.entries) {
@@ -135,13 +143,14 @@ object TextFormat {
         text.indexOf("✅").takeIf { it >= 0 }?.let { remove(it until it + 1) }
 
         // Estações (na ordem em que aparecem). Texto entre parênteses logo depois vira a descrição.
+        // o trecho mais longo ganha ("VAGA DE SHOWER" é Avaliação Q.A, não Reparo de Shower)
+        val candidates = stationPatterns.flatMap { (s, re) -> re.findAll(folded).map { s to it.range }.toList() }
+            .sortedByDescending { it.second.last - it.second.first }
         val stationHits = mutableListOf<Pair<Station, IntRange>>()
-        for ((s, re) in stationPatterns) {
-            for (m in re.findAll(folded)) {
-                if (m.range.any { removed[it] }) continue
-                if (stationHits.any { (os, r) -> os == s || r.first <= m.range.last && m.range.first <= r.last }) continue
-                stationHits += s to m.range
-            }
+        for ((s, range) in candidates) {
+            if (range.any { removed[it] }) continue
+            if (stationHits.any { (os, r) -> os == s || r.first <= range.last && range.first <= r.last }) continue
+            stationHits += s to range
         }
         stationHits.sortBy { it.second.first }
         val repairs = mutableListOf<Repair>()
@@ -163,7 +172,7 @@ object TextFormat {
             else notes = leftover
         }
 
-        val anything = repairs.isNotEmpty() || notes.isNotEmpty() || forecast != null || difficulty != null || color != null
+        val anything = repairs.isNotEmpty() || notes.isNotEmpty() || forecast != null || difficulty != null || color != null || bolsao != null
         return ParsedVehicle(
             vin = vin,
             model = model ?: headerModel,
@@ -173,6 +182,7 @@ object TextFormat {
             forecast = forecast,
             difficulty = difficulty,
             color = color,
+            bolsao = bolsao,
         )
     }
 
@@ -214,6 +224,7 @@ object TextFormat {
         val sb = StringBuilder()
         sb.append(n).append(" - ").append(v.vin).append(" - ").append(v.model.short)
         v.color?.let { sb.append(" - ").append(it.label.uppercase()) }
+        v.bolsao?.let { sb.append(" - ").append(it.label.uppercase()) }
         val desc = when (v.status) {
             Status.LIBERADO -> "LIBERADO ✅"
             Status.TUNEL -> "TÚNEL DE LIBERAÇÃO"

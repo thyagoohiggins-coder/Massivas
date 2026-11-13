@@ -59,7 +59,20 @@ enum class Station(val label: String, val color: Color, val keywords: List<Strin
     ALINHAMENTO("Alinhamento", Color(0xFF00897B), listOf("ALINHAMENTO", "ALINH")),
     TESTE_ROLO("Teste de Rolo", Color(0xFFD81B60), listOf("TESTE DE ROLO", "ROLO")),
     UNDERBODY("Underbody", Color(0xFF827717), listOf("UNDERBODY", "UNDER BODY", "UNDER")),
-    ADAS("Adas", Color(0xFF7C4DFF), listOf("CALIBRACAO ADAS", "ADAS"));
+    ADAS("Adas", Color(0xFF7C4DFF), listOf("CALIBRACAO ADAS", "ADAS")),
+    ILHA_SING_OFF("Ilha Sing Off", Color(0xFFFF7043), listOf("ILHA SING OFF", "ILHA SIGN OFF", "SING OFF", "SIGN OFF", "SINGOFF", "ILHA")),
+    AVALIACAO_QA("Avaliação Q.A", Color(0xFF9575CD), listOf("AVALIACAO Q.A", "AVALIACAO QA", "AVALIACAO DE QA", "VAGA DE SHOWER", "VAGA SHOWER", "Q.A", "QA"));
+}
+
+/** Bolsões: carros parados fora da produção (reparo é opcional). */
+enum class Bolsao(val label: String, val keywords: List<String>) {
+    PISTA("Bolsão Pista", listOf("BOLSAO PISTA", "BOLSAO DA PISTA", "BOLSAO DE PISTA")),
+    HELIPONTO("Bolsão Heliponto", listOf("BOLSAO HELIPONTO", "BOLSAO DO HELIPONTO", "HELIPONTO")),
+    REFEITORIO("Bolsão do Refeitório", listOf("BOLSAO DO REFEITORIO", "BOLSAO REFEITORIO", "REFEITORIO"));
+
+    companion object {
+        val color = Color(0xFF8D6E63)
+    }
 }
 
 enum class Status(val label: String, val color: Color) {
@@ -87,6 +100,7 @@ data class Vehicle(
     val forecast: Long? = null,
     val difficulty: Difficulty? = null,
     val notes: String = "",
+    val bolsao: Bolsao? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
 ) {
@@ -106,6 +120,7 @@ data class Vehicle(
         forecast?.let { put("forecast", it) }
         difficulty?.let { put("difficulty", it.name) }
         put("notes", notes)
+        bolsao?.let { put("bolsao", it.name) }
         put("createdAt", createdAt)
         put("updatedAt", updatedAt)
     }
@@ -130,6 +145,7 @@ data class Vehicle(
                 forecast = if (o.has("forecast")) o.getLong("forecast") else null,
                 difficulty = enumOrNull<Difficulty>(o.optString("difficulty")),
                 notes = o.optString("notes"),
+                bolsao = enumOrNull<Bolsao>(o.optString("bolsao")),
                 createdAt = o.optLong("createdAt", System.currentTimeMillis()),
                 updatedAt = o.optLong("updatedAt", System.currentTimeMillis()),
             )
