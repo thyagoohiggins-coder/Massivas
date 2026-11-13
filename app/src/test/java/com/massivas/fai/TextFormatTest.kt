@@ -147,10 +147,9 @@ class QuickVinTest {
 class VoiceFixesTest {
     @Test
     fun misheardPrefix() {
-        val r = QuickVin.parse("BB405757, VB1257, BEBE1299, bebê 001300", "VB", forcePrefix = true, padTo = 6)
-        assertEquals(listOf("VB405757", "VB001257", "VB001299", "VB001300"), r.entries.map { it.vin })
+        val r = QuickVin.parse("BB405757, VB1257, BEBE1299, bebê 001300", "VB", forcePrefix = true)
+        assertEquals(listOf("VB405757", "VB1257", "VB1299", "VB001300"), r.entries.map { it.vin })
         assertTrue(r.entries[0].prefixFixed)
-        assertTrue(r.entries[1].padded)
     }
 
     @Test
@@ -166,9 +165,32 @@ class VoiceFixesTest {
         for (said in listOf("vê bê zero zero", "um dois cinco sete", "CS 55 vírgula", "zero zero um três")) {
             text = QuickVin.tidy(text.trimEnd() + " " + QuickVin.convertSpeech(said), "VB", true, 6)
         }
-        assertEquals("VB001257 CS55, 0013", text)
+        assertEquals("VB001257 CS55, VB0013", text)
         val r = QuickVin.parse(text, "VB", true, 6)
-        assertEquals(listOf("VB001257", "VB000013"), r.entries.map { it.vin })
+        assertEquals(listOf("VB001257", "VB0013"), r.entries.map { it.vin })
         assertEquals(CarModel.C655, r.entries[0].model)
+    }
+
+    @Test
+    fun sequenceWithoutComma() {
+        // como no print: VINs falados em sequência, sem "vírgula", alguns ouvidos como BB
+        val r = QuickVin.parse("VB003090 VB003940 BB004645 VB004987 BB005706 BB005821 BB005964 005982", "VB", true, 6)
+        assertEquals(
+            listOf("VB003090", "VB003940", "VB004645", "VB004987", "VB005706", "VB005821", "VB005964", "VB005982"),
+            r.entries.map { it.vin },
+        )
+        assertEquals("VB003090, VB003940, VB004645, VB004987, VB005706, VB005821, VB005964, VB005982", r.canonical)
+    }
+
+    @Test
+    fun sequenceWithModelsAndPauses() {
+        var text = ""
+        for (said in listOf("vê bê zero zero três", "zero nove zero C 928 bebê", "zero zero", "três nove quatro zero uni tê", "005964005982")) {
+            text = QuickVin.tidy(text.trimEnd() + " " + QuickVin.convertSpeech(said), "VB", true, 6)
+        }
+        val r = QuickVin.parse(text, "VB", true, 6)
+        assertEquals(listOf("VB003090", "VB003940", "VB005964", "VB005982"), r.entries.map { it.vin })
+        assertEquals(CarModel.C928, r.entries[0].model)
+        assertEquals(CarModel.S202, r.entries[1].model)
     }
 }

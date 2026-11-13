@@ -85,8 +85,8 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
 
     var prefix by remember { mutableStateOf(vm.quickPrefix) }
     var forcePrefix by remember { mutableStateOf(vm.quickForcePrefix) }
-    val padTo = 0
-    val result = remember(text, prefix, forcePrefix, padTo) { QuickVin.parse(text, prefix, forcePrefix, padTo) }
+    val digitLen = remember { vm.commonDigitLength() }
+    val result = remember(text, prefix, forcePrefix) { QuickVin.parse(text, prefix, forcePrefix, digitLen) }
     val entries = result.entries
     fun modelOf(e: QuickVin.Entry) = e.model ?: vm.findByVin(e.vin)?.model ?: defaultModel
     val missingModel = entries.count { modelOf(it) == null }
@@ -100,7 +100,7 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
                 heard = said
                 val converted = QuickVin.convertSpeech(said)
                 if (converted.isNotBlank()) {
-                    text = QuickVin.tidy(text.trimEnd() + " " + converted, prefix, forcePrefix, padTo)
+                    text = QuickVin.tidy(text.trimEnd() + " " + converted, prefix, forcePrefix, digitLen)
                 }
             },
             onListening = { listening = it },
@@ -193,8 +193,9 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
                     Text(
                         "O modelo depois do VIN é opcional.\n" +
                             "Digitando: VB001778 CS55, VB000433 C928, VB004163\n" +
-                            "Falando: \"zero zero um sete sete oito CS cinquenta e cinco VÍRGULA zero zero zero quatro três três…\"\n" +
-                            "Pode pausar no meio do código: só a palavra \"vírgula\" começa o próximo VIN.",
+                            "Falando: \"VB zero zero um sete sete oito CS cinquenta e cinco, VB zero zero zero quatro três três…\"\n" +
+                            "Quando o VIN completa $digitLen dígitos ou você fala outro VB, o app já passa para o próximo. " +
+                            "Pode pausar no meio do código; \"vírgula\" também separa.",
                         fontSize = 13.sp,
                         modifier = Modifier.padding(top = 4.dp),
                     )
@@ -214,7 +215,7 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
 
             if (listening || partial.isNotEmpty()) {
                 Text(
-                    if (partial.isEmpty()) "🎤 Ouvindo… fale o VIN e diga \"vírgula\" para o próximo" else "🎤 $partial",
+                    if (partial.isEmpty()) "🎤 Ouvindo… fale os VINs em sequência" else "🎤 $partial",
                     fontStyle = FontStyle.Italic,
                     color = MaterialTheme.colorScheme.primary,
                 )

@@ -16,7 +16,13 @@ object QuickVin {
         val prefixFixed: Boolean = false,
         val padded: Boolean = false,
     )
-    data class Result(val entries: List<Entry>, val unknown: List<String>, val unknownModels: List<String>)
+    data class Result(
+        val entries: List<Entry>,
+        val unknown: List<String>,
+        val unknownModels: List<String>,
+        /** Texto arrumado, na ordem: "VB001778 CS55, VB000433, ..." */
+        val canonical: String = "",
+    )
 
     private val units = mapOf(
         "ZERO" to 0, "UM" to 1, "UMA" to 1, "DOIS" to 2, "DUAS" to 2, "TRES" to 3, "QUATRO" to 4,
@@ -103,7 +109,11 @@ object QuickVin {
                 t in fillers -> Unit
                 t == "E" -> segs.last() += "E"
                 t in letterNames -> segs.last() += letterNames.getValue(t)
-                else -> segs.last() += (if (t.all { it.isLetter() }) decomposeLetters(t) else null) ?: t
+                t.length == 17 && t.any(Char::isDigit) && t.any(Char::isLetter) -> segs.last() += t
+                else -> Regex("[A-Z]+|[0-9]+").findAll(t).forEach { run ->
+                    val r = run.value
+                    segs.last() += (if (r[0].isLetter()) decomposeLetters(r) else null) ?: r
+                }
             }
             i++
         }
@@ -138,55 +148,121 @@ object QuickVin {
         return out.toString()
     }
 
+    private fun isFull(p: String) = p.length == 17 && p.any(Char::isDigit) && p.any(Char::isLetter)
+
     /**
      * @param prefix prefixo das letras (ex.: "VB")
      * @param forcePrefix sempre usa [prefix] no lugar das letras ouvidas (corrige "BB", "VV"...)
-     * @param padTo completa com zeros à esquerda até esse número de dígitos (0 = não completa)
+     * @param digitLen quantos dígitos tem um VIN (ex.: 6). Ao completar, o próximo número já é outro VIN,
+     *   então a "vírgula" é opcional.
      */
-    fun parse(text: String, prefix: String = "VB", forcePrefix: Boolean = false, padTo: Int = 0): Result {
-        val entries = mutableListOf<Entry>()
+    fun parse(text: String, prefix: String = "VB", forcePrefix: Boolean = false, digitLen: Int = 6): Result {
+        val entries = LinkedHashMap<String, Entry>()
         val unknown = mutableListOf<String>()
         val unknownModels = mutableListOf<String>()
+        val canonical = mutableListOf<String>()
         var lastPrefix = prefix
-        for (seg in segments(text)) {
-            val full = seg.firstOrNull { it.length == 17 && it.any(Char::isDigit) && it.any(Char::isLetter) }
-            var vin: String
-            val rest: String
-            var added = false
-            var fixed = false
-            var padded = false
-            if (full != null) {
-                vin = full
-                rest = seg.filter { it != full }.joinToString("")
-            } else {
-                val c = seg.joinToString("")
-                val m = Regex("^([A-Z]{0,4})([0-9]{4,})(.*)$").find(c)
-                if (m == null) { unknown += seg.joinToString(" "); continue }
-                var letters = m.groupValues[1]
-                when {
-                    forcePrefix && prefix.isNotEmpty() -> {
-                        if (letters.isEmpty()) added = true else if (letters != prefix) fixed = true
-                        letters = prefix
-                    }
-                    letters.isEmpty() -> { letters = lastPrefix; added = lastPrefix.isNotEmpty() }
-                    letters != prefix && letters.length == prefix.length &&
-                        letters.indices.all { letters[it] in confusable && prefix[it] in confusable } -> {
-                        letters = prefix; fixed = true
-                    }
-                    else -> lastPrefix = letters
-                }
-                var digits = m.groupValues[2]
-                if (padTo > 0 && digits.length < padTo) { digits = digits.padStart(padTo, '0'); padded = true }
-                vin = letters + digits
-                rest = m.groupValues[3]
-            }
-            val r = rest.replace("TIGUO", "TIGGO").replace(Regex("TIGO(?!O)"), "TIGGO")
+
+        var letters = ""
+        var digits = ""
+        var full: String? = null
+        val rest = StringBuilder()
+
+        fun model(r0: String): CarModel? {
+            val r = r0.replace("TIGUO", "TIGGO").replace(Regex("TIGO(?!O)"), "TIGGO")
             fun find(x: String) = modelAliases.firstOrNull { x.startsWith(it.first) }?.second
-            val model = if (r.isEmpty()) null else find(r) ?: find(r.removePrefix("E"))
-            if (r.isNotEmpty() && model == null) unknownModels += "$vin: $rest"
-            entries += Entry(vin, model, added, fixed, padded)
+            return if (r.isEmpty()) null else find(r) ?: find(r.removePrefix("E"))
         }
-        return Result(entries.associateBy { it.vin }.values.toList(), unknown, unknownModels)
+
+        fun finish() {
+            if (letters.length > 4) { rest.insert(0, letters); letters = "" }
+            val f = full
+            when {
+                f != null || digits.length >= 4 -> {
+                    var added = false
+                    var fixed = false
+                    val vin = if (f != null) f else {
+                        var l = letters
+                        when {
+                            forcePrefix && prefix.isNotEmpty() -> {
+                                if (l.isEmpty()) added = true else if (l != prefix) fixed = true
+                                l = prefix
+                            }
+                            l.isEmpty() -> { l = lastPrefix; added = lastPrefix.isNotEmpty() }
+                            l != prefix && l.length == prefix.length &&
+                                l.indices.all { l[it] in confusable && prefix[it] in confusable } -> { l = prefix; fixed = true }
+                            else -> lastPrefix = l
+                        }
+                        l + digits
+                    }
+                    val m = model(rest.toString())
+                    if (rest.isNotEmpty() && m == null) unknownModels += "$vin: $rest"
+                    if (vin !in entries) entries[vin] = Entry(vin, m, added, fixed)
+                    else if (m != null) entries[vin] = entries.getValue(vin).copy(model = m)
+                    canonical += if (m != null) "$vin ${m.short}" else vin
+                }
+                letters.isNotEmpty() || digits.isNotEmpty() || rest.isNotEmpty() -> {
+                    val raw = listOf(letters, digits, rest.toString()).filter { it.isNotEmpty() }.joinToString(" ")
+                    unknown += raw
+                    canonical += raw
+                }
+            }
+            letters = ""; digits = ""; full = null; rest.setLength(0)
+        }
+
+        fun startDigits(p: String) {
+            digits = p
+            // números grudados ("005964005982") viram VINs separados
+            while (digits.length >= 2 * digitLen) {
+                val restDigits = digits.drop(digitLen)
+                digits = digits.take(digitLen)
+                finish()
+                digits = restDigits
+            }
+        }
+
+        for (seg0 in segments(text)) {
+            // junta letras vizinhas: "V" "B" → "VB", "UNI" "T" → "UNIT"
+            val seg = mutableListOf<String>()
+            for (p in seg0) {
+                val last = seg.lastOrNull()
+                if (last != null && !isFull(p) && !isFull(last) && p.all(Char::isLetter) && last.all(Char::isLetter)) seg[seg.lastIndex] = last + p
+                else seg += p
+            }
+            for ((i, p) in seg.withIndex()) {
+                val hasVin = full != null || digits.isNotEmpty()
+                when {
+                    isFull(p) -> { if (hasVin || letters.isNotEmpty()) finish(); full = p }
+                    p.all(Char::isLetter) -> {
+                        val next = seg.getOrNull(i + 1)
+                        // "VB"/"BB" (parecido com o prefixo) começa outro VIN, mesmo no fim de um trecho falado
+                        val prefixLike = prefix.isNotEmpty() &&
+                            (p == prefix || (p.length == prefix.length && p.all { it in confusable }))
+                        val nextIsDigits = next != null && next.all(Char::isDigit)
+                        val startsVin = (p.length <= 4 && nextIsDigits && next!!.length >= 4) ||
+                            (prefixLike && (next == null || nextIsDigits))
+                        when {
+                            hasVin && startsVin -> { finish(); letters = p }
+                            hasVin -> rest.append(p)
+                            else -> letters += p
+                        }
+                    }
+                    else -> { // números
+                        val complete = full != null || digits.length >= digitLen || rest.isNotEmpty()
+                        when {
+                            complete && p.length >= 4 -> { finish(); startDigits(p) }
+                            complete -> rest.append(p)
+                            digits.isNotEmpty() && (p.length >= digitLen || (digits.length >= 4 && digits.length + p.length > digitLen)) -> {
+                                finish(); startDigits(p)
+                            }
+                            else -> startDigits(digits + p)
+                        }
+                    }
+                }
+            }
+            finish()
+        }
+        return Result(entries.values.toList(), unknown, unknownModels, canonical.joinToString(", "))
     }
 
     /**
@@ -216,17 +292,10 @@ object QuickVin {
         return sb.toString()
     }
 
-    /** Arruma os VINs já terminados (antes de uma vírgula) no formato "VB001778 CS55". */
-    fun tidy(text: String, prefix: String, forcePrefix: Boolean, padTo: Int): String {
-        val parts = text.replace(Regex("\\s+"), " ").split(',')
-        if (parts.size < 2) return text.replace(Regex("\\s+"), " ").trimStart()
-        val done = parts.dropLast(1).map { p ->
-            val r = parse(p, prefix, forcePrefix, padTo)
-            val e = r.entries.singleOrNull()
-            if (e != null && r.unknown.isEmpty()) (if (e.model != null) "${e.vin} ${e.model.short}" else e.vin) else p.trim()
-        }.filter { it.isNotBlank() }
-        val last = parts.last().trim()
-        return done.joinToString(", ") + ", " + last
+    /** Reescreve o campo já arrumado: "VB003090, VB003940, VB004645 CS55". */
+    fun tidy(text: String, prefix: String, forcePrefix: Boolean, digitLen: Int = 6): String {
+        val out = parse(text, prefix, forcePrefix, digitLen).canonical
+        return if (out.isNotEmpty() && text.trimEnd().endsWith(",")) "$out, " else out
     }
 
     /** Converte o que foi falado em texto limpo: "VB001778 CS55, VB000433". */
