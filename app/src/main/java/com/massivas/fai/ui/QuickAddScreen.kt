@@ -85,9 +85,7 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
 
     var prefix by remember { mutableStateOf(vm.quickPrefix) }
     var forcePrefix by remember { mutableStateOf(vm.quickForcePrefix) }
-    var pad by remember { mutableStateOf(vm.quickPad) }
-    val digits = remember { vm.commonDigitLength() }
-    val padTo = if (pad) digits else 0
+    val padTo = 0
     val result = remember(text, prefix, forcePrefix, padTo) { QuickVin.parse(text, prefix, forcePrefix, padTo) }
     val entries = result.entries
     fun modelOf(e: QuickVin.Entry) = e.model ?: vm.findByVin(e.vin)?.model ?: defaultModel
@@ -102,7 +100,7 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
                 heard = said
                 val converted = QuickVin.convertSpeech(said)
                 if (converted.isNotBlank()) {
-                    text = QuickVin.tidy(text.trimEnd() + " " + converted, prefix, forcePrefix, if (pad) digits else 0)
+                    text = QuickVin.tidy(text.trimEnd() + " " + converted, prefix, forcePrefix, padTo)
                 }
             },
             onListening = { listening = it },
@@ -249,10 +247,6 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
                         "Sempre usar o prefixo $prefix (corrige \"BB\", \"VV\", \"bebê\"…)",
                         forcePrefix,
                     ) { forcePrefix = it; vm.quickForcePrefix = it }
-                    OptionRow(
-                        "Completar com zeros até $digits dígitos (1257 → ${"1257".padStart(digits, '0')})",
-                        pad,
-                    ) { pad = it; vm.quickPad = it }
                 }
             }
 
@@ -289,7 +283,6 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
                                     append(if (existing != null) "já existe" else "novo")
                                     if (e.prefixAdded) append(" · prefixo $prefix")
                                     if (e.prefixFixed) append(" · letras corrigidas")
-                                    if (e.padded) append(" · zeros completados")
                                 },
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
