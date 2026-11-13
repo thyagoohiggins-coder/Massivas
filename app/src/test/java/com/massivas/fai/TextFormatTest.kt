@@ -143,3 +143,32 @@ class QuickVinTest {
         assertEquals("VB001778 CS55, VB000433", QuickVin.normalizeSpeech("v b 001778 CS 55 vírgula vb 000433"))
     }
 }
+
+class VoiceFixesTest {
+    @Test
+    fun misheardPrefix() {
+        val r = QuickVin.parse("BB405757, VB1257, BEBE1299, bebê 001300", "VB", forcePrefix = true, padTo = 6)
+        assertEquals(listOf("VB405757", "VB001257", "VB001299", "VB001300"), r.entries.map { it.vin })
+        assertTrue(r.entries[0].prefixFixed)
+        assertTrue(r.entries[1].padded)
+    }
+
+    @Test
+    fun confusableWithoutForce() {
+        val r = QuickVin.parse("BB405757, DV001234", "VB")
+        assertEquals(listOf("VB405757", "VB001234"), r.entries.map { it.vin })
+    }
+
+    @Test
+    fun pauseDoesNotSplitVin() {
+        // três trechos falados com pausa; só "vírgula" separa
+        var text = ""
+        for (said in listOf("vê bê zero zero", "um dois cinco sete", "CS 55 vírgula", "zero zero um três")) {
+            text = QuickVin.tidy(text.trimEnd() + " " + QuickVin.convertSpeech(said), "VB", true, 6)
+        }
+        assertEquals("VB001257 CS55, VB 0013", text)
+        val r = QuickVin.parse(text, "VB", true, 6)
+        assertEquals(listOf("VB001257", "VB000013"), r.entries.map { it.vin })
+        assertEquals(CarModel.C655, r.entries[0].model)
+    }
+}

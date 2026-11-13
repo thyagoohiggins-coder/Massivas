@@ -107,6 +107,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             .filter { it.isNotEmpty() && it.length <= 4 }
             .groupingBy { it }.eachCount().maxByOrNull { it.value }?.key ?: "VB"
 
+    /** Quantidade de dígitos mais comum depois do prefixo (ex.: VB002035 → 6). */
+    fun commonDigitLength(): Int =
+        _vehicles.value.map { it.vin.dropWhile { c -> c.isLetter() } }
+            .filter { it.isNotEmpty() && it.all { c -> c.isDigit() } }
+            .groupingBy { it.length }.eachCount().maxByOrNull { it.value }?.key ?: 6
+
+    var quickPrefix: String
+        get() = prefs.getString("quickPrefix", null) ?: commonPrefix()
+        set(v) { prefs.edit().putString("quickPrefix", v).apply() }
+    var quickForcePrefix: Boolean
+        get() = prefs.getBoolean("quickForcePrefix", true)
+        set(v) { prefs.edit().putBoolean("quickForcePrefix", v).apply() }
+    var quickPad: Boolean
+        get() = prefs.getBoolean("quickPad", true)
+        set(v) { prefs.edit().putBoolean("quickPad", v).apply() }
+
     fun newId(): String = UUID.randomUUID().toString()
 
     fun delete(id: String) = persist(_vehicles.value.filterNot { it.id == id })

@@ -11,6 +11,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,6 +33,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -55,6 +57,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -77,9 +80,15 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
     var defaultModel by remember { mutableStateOf<CarModel?>(null) }
     var listening by remember { mutableStateOf(false) }
     var partial by remember { mutableStateOf("") }
+    var heard by remember { mutableStateOf("") }
+    val focus = LocalFocusManager.current
 
-    val prefix = remember { vm.commonPrefix() }
-    val result = remember(text) { QuickVin.parse(text, prefix) }
+    var prefix by remember { mutableStateOf(vm.quickPrefix) }
+    var forcePrefix by remember { mutableStateOf(vm.quickForcePrefix) }
+    var pad by remember { mutableStateOf(vm.quickPad) }
+    val digits = remember { vm.commonDigitLength() }
+    val padTo = if (pad) digits else 0
+    val result = remember(text, prefix, forcePrefix, padTo) { QuickVin.parse(text, prefix, forcePrefix, padTo) }
     val entries = result.entries
     fun modelOf(e: QuickVin.Entry) = e.model ?: vm.findByVin(e.vin)?.model ?: defaultModel
     val missingModel = entries.count { modelOf(it) == null }
@@ -89,14 +98,11 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
             ctx,
             onPartial = { partial = it },
             onFinal = { said ->
-                val clean = QuickVin.normalizeSpeech(said, QuickVin.parse(text, prefix).entries.lastOrNull()?.vin?.takeWhile { it.isLetter() } ?: prefix)
-                if (clean.isNotBlank()) {
-                    val base = text.trimEnd()
-                    text = when {
-                        base.isEmpty() -> "$clean, "
-                        base.endsWith(",") -> "$base $clean, "
-                        else -> "$base, $clean, "
-                    }
+                // Só "vírgula" separa os VINs: uma pausa no meio do código não quebra o VIN.
+                heard = said
+                val converted = QuickVin.convertSpeech(said)
+                if (converted.isNotBlank()) {
+                    text = QuickVin.tidy(text.trimEnd() + " " + converted, prefix, forcePrefix, if (pad) digits else 0)
                 }
             },
             onListening = { listening = it },
@@ -115,6 +121,7 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
             Toast.makeText(ctx, "Reconhecimento de voz não disponível neste aparelho (instale o app Google).", Toast.LENGTH_LONG).show()
             return
         }
+        focus.clearFocus() // esconde o teclado para ver a conferência
         if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
             dictation.start()
         } else permission.launch(Manifest.permission.RECORD_AUDIO)
@@ -188,8 +195,8 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
                     Text(
                         "O modelo depois do VIN é opcional.\n" +
                             "Digitando: VB001778 CS55, VB000433 C928, VB004163\n" +
-                            "Falando: \"VB zero zero um sete sete oito CS55, vírgula, VB 000433 C928…\"\n" +
-                            "Só os números também valem: o prefixo $prefix é colocado sozinho.",
+                            "Falando: \"zero zero um sete sete oito CS cinquenta e cinco VÍRGULA zero zero zero quatro três três…\"\n" +
+                            "Pode pausar no meio do código: só a palavra \"vírgula\" começa o próximo VIN.",
                         fontSize = 13.sp,
                         modifier = Modifier.padding(top = 4.dp),
                     )
@@ -213,6 +220,40 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
                     fontStyle = FontStyle.Italic,
                     color = MaterialTheme.colorScheme.primary,
                 )
+            }
+            if (heard.isNotEmpty()) {
+                Text(
+                    "Último trecho ouvido: \"$heard\"",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            // Ajustes que deixam a voz bem mais precisa
+            Surface(color = MaterialTheme.colorScheme.surfaceContainer, shape = RoundedCornerShape(12.dp)) {
+                Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Prefixo", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        OutlinedTextField(
+                            value = prefix,
+                            onValueChange = { v ->
+                                prefix = v.uppercase().filter { it.isLetter() }.take(4)
+                                vm.quickPrefix = prefix
+                            },
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold),
+                            modifier = Modifier.width(110.dp),
+                        )
+                    }
+                    OptionRow(
+                        "Sempre usar o prefixo $prefix (corrige \"BB\", \"VV\", \"bebê\"…)",
+                        forcePrefix,
+                    ) { forcePrefix = it; vm.quickForcePrefix = it }
+                    OptionRow(
+                        "Completar com zeros até $digits dígitos (1257 → ${"1257".padStart(digits, '0')})",
+                        pad,
+                    ) { pad = it; vm.quickPad = it }
+                }
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -247,6 +288,8 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
                                 buildString {
                                     append(if (existing != null) "já existe" else "novo")
                                     if (e.prefixAdded) append(" · prefixo $prefix")
+                                    if (e.prefixFixed) append(" · letras corrigidas")
+                                    if (e.padded) append(" · zeros completados")
                                 },
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -263,6 +306,14 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
             }
             Spacer(Modifier.height(16.dp))
         }
+    }
+}
+
+@Composable
+private fun OptionRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable { onChange(!checked) }, verticalAlignment = Alignment.CenterVertically) {
+        Checkbox(checked = checked, onCheckedChange = onChange)
+        Text(label, fontSize = 13.sp)
     }
 }
 

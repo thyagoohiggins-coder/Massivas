@@ -9,7 +9,13 @@ package com.massivas.fai
  * O modelo depois do VIN é opcional. Se o VIN vier só com números, usa o prefixo do anterior (ex.: VB).
  */
 object QuickVin {
-    data class Entry(val vin: String, val model: CarModel?, val prefixAdded: Boolean)
+    data class Entry(
+        val vin: String,
+        val model: CarModel?,
+        val prefixAdded: Boolean,
+        val prefixFixed: Boolean = false,
+        val padded: Boolean = false,
+    )
     data class Result(val entries: List<Entry>, val unknown: List<String>, val unknownModels: List<String>)
 
     private val units = mapOf(
@@ -46,6 +52,25 @@ object QuickVin {
 
     private fun isNumberWord(t: String) = t in units || t in tensAndTeens || t == MIL
 
+    private val spelled = letterNames + mapOf("DE" to "D")
+
+    /** "BEBE" → "BB", "VEBE" → "VB" (letras faladas grudadas). */
+    private fun decomposeLetters(t: String): String? {
+        if (t.length < 4) return null
+        val best = arrayOfNulls<String>(t.length + 1)
+        best[0] = ""
+        for (i in 0 until t.length) {
+            val cur = best[i] ?: continue
+            for ((name, letter) in spelled) {
+                if (t.startsWith(name, i) && best[i + name.length] == null) best[i + name.length] = cur + letter
+            }
+        }
+        return best[t.length]?.takeIf { it.length >= 2 }
+    }
+
+    /** Letras cujo nome falado termina em "ê" e se confundem (vê/bê/dê/pê/tê...). */
+    private val confusable = setOf('B', 'V', 'D', 'P', 'T', 'G', 'C', 'Z', 'E', 'W')
+
     /** Separa em grupos (um por VIN) e converte palavras em letras/números. */
     private fun segments(text: String): List<List<String>> {
         val tokens = fold(text)
@@ -78,7 +103,7 @@ object QuickVin {
                 t in fillers -> Unit
                 t == "E" -> segs.last() += "E"
                 t in letterNames -> segs.last() += letterNames.getValue(t)
-                else -> segs.last() += t
+                else -> segs.last() += (if (t.all { it.isLetter() }) decomposeLetters(t) else null) ?: t
             }
             i++
         }
@@ -113,16 +138,23 @@ object QuickVin {
         return out.toString()
     }
 
-    fun parse(text: String, defaultPrefix: String = "VB"): Result {
+    /**
+     * @param prefix prefixo das letras (ex.: "VB")
+     * @param forcePrefix sempre usa [prefix] no lugar das letras ouvidas (corrige "BB", "VV"...)
+     * @param padTo completa com zeros à esquerda até esse número de dígitos (0 = não completa)
+     */
+    fun parse(text: String, prefix: String = "VB", forcePrefix: Boolean = false, padTo: Int = 0): Result {
         val entries = mutableListOf<Entry>()
         val unknown = mutableListOf<String>()
         val unknownModels = mutableListOf<String>()
-        var prefix = defaultPrefix
+        var lastPrefix = prefix
         for (seg in segments(text)) {
             val full = seg.firstOrNull { it.length == 17 && it.any(Char::isDigit) && it.any(Char::isLetter) }
-            val vin: String
+            var vin: String
             val rest: String
             var added = false
+            var fixed = false
+            var padded = false
             if (full != null) {
                 vin = full
                 rest = seg.filter { it != full }.joinToString("")
@@ -131,17 +163,70 @@ object QuickVin {
                 val m = Regex("^([A-Z]{0,4})([0-9]{4,})(.*)$").find(c)
                 if (m == null) { unknown += seg.joinToString(" "); continue }
                 var letters = m.groupValues[1]
-                if (letters.isEmpty()) { letters = prefix; added = prefix.isNotEmpty() } else prefix = letters
-                vin = letters + m.groupValues[2]
+                when {
+                    forcePrefix && prefix.isNotEmpty() -> {
+                        if (letters.isEmpty()) added = true else if (letters != prefix) fixed = true
+                        letters = prefix
+                    }
+                    letters.isEmpty() -> { letters = lastPrefix; added = lastPrefix.isNotEmpty() }
+                    letters != prefix && letters.length == prefix.length &&
+                        letters.indices.all { letters[it] in confusable && prefix[it] in confusable } -> {
+                        letters = prefix; fixed = true
+                    }
+                    else -> lastPrefix = letters
+                }
+                var digits = m.groupValues[2]
+                if (padTo > 0 && digits.length < padTo) { digits = digits.padStart(padTo, '0'); padded = true }
+                vin = letters + digits
                 rest = m.groupValues[3]
             }
             val r = rest.replace("TIGUO", "TIGGO").replace(Regex("TIGO(?!O)"), "TIGGO")
             fun find(x: String) = modelAliases.firstOrNull { x.startsWith(it.first) }?.second
             val model = if (r.isEmpty()) null else find(r) ?: find(r.removePrefix("E"))
             if (r.isNotEmpty() && model == null) unknownModels += "$vin: $rest"
-            entries += Entry(vin, model, added)
+            entries += Entry(vin, model, added, fixed, padded)
         }
         return Result(entries.associateBy { it.vin }.values.toList(), unknown, unknownModels)
+    }
+
+    /**
+     * Converte a fala em texto para o campo, SEM decidir onde o VIN termina:
+     * só "vírgula" (ou "próximo") separa. Ex.: "vê bê zero zero um dois" → "VB 0012".
+     */
+    fun convertSpeech(text: String): String {
+        val tokens = fold(text)
+            .replace("-", "")
+            .replace(Regex("[,;\\n]"), " , ")
+            .replace(Regex("[^A-Z0-9, ]"), " ")
+            .split(' ').filter { it.isNotBlank() }
+        val sb = StringBuilder()
+        var piece = StringBuilder()
+        fun flush() {
+            if (piece.isNotBlank()) {
+                val segs = segments(piece.toString())
+                val conv = segs.joinToString(" ") { it.joinToString(" ") }
+                if (conv.isNotBlank()) { if (sb.isNotEmpty() && !sb.endsWith(" ")) sb.append(' '); sb.append(conv) }
+            }
+            piece = StringBuilder()
+        }
+        for (t in tokens) {
+            if (t in separators) { flush(); sb.append(", ") } else piece.append(t).append(' ')
+        }
+        flush()
+        return sb.toString()
+    }
+
+    /** Arruma os VINs já terminados (antes de uma vírgula) no formato "VB001778 CS55". */
+    fun tidy(text: String, prefix: String, forcePrefix: Boolean, padTo: Int): String {
+        val parts = text.replace(Regex("\\s+"), " ").split(',')
+        if (parts.size < 2) return text.replace(Regex("\\s+"), " ").trimStart()
+        val done = parts.dropLast(1).map { p ->
+            val r = parse(p, prefix, forcePrefix, padTo)
+            val e = r.entries.singleOrNull()
+            if (e != null && r.unknown.isEmpty()) (if (e.model != null) "${e.vin} ${e.model.short}" else e.vin) else p.trim()
+        }.filter { it.isNotBlank() }
+        val last = parts.last().trim()
+        return done.joinToString(", ") + ", " + last
     }
 
     /** Converte o que foi falado em texto limpo: "VB001778 CS55, VB000433". */
