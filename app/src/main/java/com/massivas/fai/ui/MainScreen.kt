@@ -1,16 +1,18 @@
 package com.massivas.fai.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -19,20 +21,27 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -43,9 +52,12 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -65,6 +77,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -75,36 +88,60 @@ import com.massivas.fai.MainViewModel
 import com.massivas.fai.Station
 import com.massivas.fai.Status
 import com.massivas.fai.TextFormat
+import com.massivas.fai.UpdateState
 import com.massivas.fai.Vehicle
 import com.massivas.fai.normalize
 import com.massivas.fai.vinComparator
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
+private const val NEW = "__new__"
+
 @Composable
 fun MainScreen(vm: MainViewModel = viewModel()) {
-    val ctx = LocalContext.current
     val vehicles by vm.vehicles.collectAsStateWithLifecycle()
+    var editorId by rememberSaveable { mutableStateOf<String?>(null) }
+
+    val id = editorId
+    if (id != null) {
+        val initial = if (id == NEW) null else vehicles.firstOrNull { it.id == id }
+        VehicleEditor(initial = initial, vm = vm, onClose = { editorId = null })
+    } else {
+        ListScreen(
+            vm = vm,
+            vehicles = vehicles,
+            onAdd = { editorId = NEW },
+            onEdit = { editorId = it.id },
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@Composable
+private fun ListScreen(vm: MainViewModel, vehicles: List<Vehicle>, onAdd: () -> Unit, onEdit: (Vehicle) -> Unit) {
+    val ctx = LocalContext.current
     val update by vm.update.collectAsStateWithLifecycle()
 
-    var editorOpen by remember { mutableStateOf(false) }
-    var editing by remember { mutableStateOf<Vehicle?>(null) }
     var importOpen by remember { mutableStateOf(false) }
+    var shareOpen by remember { mutableStateOf(false) }
     var aboutOpen by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf<String?>(null) }
     var menuOpen by remember { mutableStateOf(false) }
+    var stationMenu by remember { mutableStateOf(false) }
 
     var searching by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
-    var statusFilter by rememberSaveable { mutableStateOf<String?>(null) }
+    var statusTab by rememberSaveable { mutableStateOf(0) } // 0 todos, 1 processo, 2 túnel, 3 liberados
     var stationFilter by rememberSaveable { mutableStateOf<String?>(null) }
     var modelFilter by rememberSaveable { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) { vm.checkOnStart() }
 
-    val filtered = remember(vehicles, query, statusFilter, stationFilter, modelFilter) {
+    val statusOfTab: Status? = when (statusTab) {
+        1 -> Status.PROCESSO; 2 -> Status.TUNEL; 3 -> Status.LIBERADO; else -> null
+    }
+    val filtered = remember(vehicles, query, statusTab, stationFilter, modelFilter) {
         val q = normalize(query)
         vehicles.filter { v ->
-            (statusFilter == null || v.status.name == statusFilter) &&
+            (statusOfTab == null || v.status == statusOfTab) &&
                 (modelFilter == null || v.model.name == modelFilter) &&
                 (stationFilter == null || v.pendingRepairs.any { it.station.name == stationFilter }) &&
                 (q.isEmpty() || v.vin.contains(q.replace(" ", "")) ||
@@ -117,84 +154,111 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
             if (g.isEmpty()) null else m to g
         }
     }
+    val filtersActive = statusTab != 0 || stationFilter != null || modelFilter != null || query.isNotBlank()
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(
+            Column {
+                TopAppBar(
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                        actionIconContentColor = MaterialTheme.colorScheme.onPrimary,
+                    ),
+                    title = {
+                        if (searching) {
+                            TextField(
+                                value = query,
+                                onValueChange = { query = it },
+                                placeholder = { Text("Buscar VIN ou reparo") },
+                                singleLine = true,
+                                colors = TextFieldDefaults.colors(
+                                    focusedContainerColor = Color.Transparent,
+                                    unfocusedContainerColor = Color.Transparent,
+                                    focusedTextColor = MaterialTheme.colorScheme.onPrimary,
+                                    unfocusedTextColor = MaterialTheme.colorScheme.onPrimary,
+                                    focusedPlaceholderColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.6f),
+                                    unfocusedPlaceholderColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.6f),
+                                    cursorColor = MaterialTheme.colorScheme.onPrimary,
+                                    focusedIndicatorColor = MaterialTheme.colorScheme.onPrimary,
+                                ),
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        } else {
+                            Column {
+                                Text("Massivas Fai", fontWeight = FontWeight.Bold)
+                                val pend = vehicles.count { it.status != Status.LIBERADO }
+                                Text("$pend pendentes · ${vehicles.size} no total", fontSize = 12.sp)
+                            }
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = {
+                            if (searching) query = ""
+                            searching = !searching
+                        }) { Icon(if (searching) Icons.Filled.Close else Icons.Filled.Search, "Buscar") }
+                        if (!searching) {
+                            IconButton(onClick = { shareOpen = true }) { Icon(Icons.Filled.Share, "Enviar lista") }
+                        }
+                        Box {
+                            IconButton(onClick = { menuOpen = true }) { Icon(Icons.Filled.MoreVert, "Menu") }
+                            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                                DropdownMenuItem(text = { Text("Colar lista do WhatsApp") }, onClick = {
+                                    menuOpen = false; importOpen = true
+                                })
+                                DropdownMenuItem(text = { Text("Enviar lista") }, onClick = {
+                                    menuOpen = false; shareOpen = true
+                                })
+                                HorizontalDivider()
+                                DropdownMenuItem(text = { Text("Remover liberados") }, onClick = {
+                                    menuOpen = false; confirmClear = "released"
+                                })
+                                DropdownMenuItem(text = { Text("Apagar tudo") }, onClick = {
+                                    menuOpen = false; confirmClear = "all"
+                                })
+                                HorizontalDivider()
+                                DropdownMenuItem(text = { Text("Verificar atualizações") }, onClick = {
+                                    menuOpen = false; vm.checkForUpdate()
+                                })
+                                DropdownMenuItem(text = { Text("Sobre") }, onClick = {
+                                    menuOpen = false; aboutOpen = true
+                                })
+                            }
+                        }
+                    },
+                )
+                // Abas de status com contagem
+                TabRow(
+                    selectedTabIndex = statusTab,
                     containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary,
-                ),
-                title = {
-                    if (searching) {
-                        TextField(
-                            value = query,
-                            onValueChange = { query = it },
-                            placeholder = { Text("Buscar VIN ou reparo") },
-                            singleLine = true,
-                            colors = TextFieldDefaults.colors(
-                                focusedContainerColor = Color.Transparent,
-                                unfocusedContainerColor = Color.Transparent,
-                                focusedTextColor = MaterialTheme.colorScheme.onPrimary,
-                                unfocusedTextColor = MaterialTheme.colorScheme.onPrimary,
-                                focusedPlaceholderColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.6f),
-                                unfocusedPlaceholderColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.6f),
-                                cursorColor = MaterialTheme.colorScheme.onPrimary,
-                            ),
-                            modifier = Modifier.fillMaxWidth(),
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                ) {
+                    val tabs = listOf(
+                        "Todos" to vehicles.size,
+                        "Processo" to vehicles.count { it.status == Status.PROCESSO },
+                        "Túnel" to vehicles.count { it.status == Status.TUNEL },
+                        "Liberados" to vehicles.count { it.status == Status.LIBERADO },
+                    )
+                    tabs.forEachIndexed { i, (label, count) ->
+                        Tab(
+                            selected = statusTab == i,
+                            onClick = { statusTab = i },
+                            text = {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("$count", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                                    Text(label, fontSize = 11.sp, maxLines = 1)
+                                }
+                            },
                         )
-                    } else {
-                        Column {
-                            Text("Massivas Fai", fontWeight = FontWeight.Bold)
-                            Text("v${BuildConfig.VERSION_NAME}", fontSize = 11.sp)
-                        }
                     }
-                },
-                actions = {
-                    IconButton(onClick = {
-                        if (searching) query = ""
-                        searching = !searching
-                    }) {
-                        Icon(if (searching) Icons.Filled.Close else Icons.Filled.Search, "Buscar")
-                    }
-                    Box {
-                        IconButton(onClick = { menuOpen = true }) { Icon(Icons.Filled.MoreVert, "Menu") }
-                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                            DropdownMenuItem(text = { Text("Importar lista (texto)") }, onClick = {
-                                menuOpen = false; importOpen = true
-                            })
-                            DropdownMenuItem(text = { Text("Compartilhar lista") }, onClick = {
-                                menuOpen = false
-                                share(ctx, TextFormat.export(vehicles, includeReleased = true))
-                            })
-                            DropdownMenuItem(text = { Text("Compartilhar só pendentes") }, onClick = {
-                                menuOpen = false
-                                share(ctx, TextFormat.export(vehicles, includeReleased = false))
-                            })
-                            HorizontalDivider()
-                            DropdownMenuItem(text = { Text("Verificar atualizações") }, onClick = {
-                                menuOpen = false; vm.checkForUpdate()
-                            })
-                            DropdownMenuItem(text = { Text("Remover liberados") }, onClick = {
-                                menuOpen = false; confirmClear = "released"
-                            })
-                            DropdownMenuItem(text = { Text("Apagar tudo") }, onClick = {
-                                menuOpen = false; confirmClear = "all"
-                            })
-                            DropdownMenuItem(text = { Text("Sobre") }, onClick = {
-                                menuOpen = false; aboutOpen = true
-                            })
-                        }
-                    }
-                },
-            )
+                }
+            }
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(
-                onClick = { editing = null; editorOpen = true },
+                onClick = onAdd,
                 icon = { Icon(Icons.Filled.Add, null) },
-                text = { Text("Adicionar VIN") },
+                text = { Text("Adicionar VIN", fontWeight = FontWeight.Bold) },
                 containerColor = MaterialTheme.colorScheme.secondary,
                 contentColor = MaterialTheme.colorScheme.onSecondary,
             )
@@ -202,95 +266,94 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(bottom = 96.dp),
+            contentPadding = PaddingValues(bottom = 100.dp),
         ) {
+            // Filtro por modelo + estação
             item {
-                SummaryBar(vehicles, statusFilter) { statusFilter = it }
-            }
-            item {
-                ChipRow {
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box {
+                        val st = stationFilter?.let { n -> Station.entries.first { it.name == n } }
+                        FilterChip(
+                            selected = st != null,
+                            onClick = { stationMenu = true },
+                            label = { Text(st?.label ?: "Estação") },
+                            leadingIcon = if (st != null) { { ColorDotRaw(Color.White, 10) } } else null,
+                            trailingIcon = { Icon(Icons.Filled.ArrowDropDown, null) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = st?.color ?: MaterialTheme.colorScheme.primary,
+                                selectedLabelColor = Color.White,
+                                selectedTrailingIconColor = Color.White,
+                            ),
+                        )
+                        DropdownMenu(expanded = stationMenu, onDismissRequest = { stationMenu = false }) {
+                            DropdownMenuItem(text = { Text("Todas as estações") }, onClick = {
+                                stationFilter = null; stationMenu = false
+                            })
+                            Station.entries.forEach { s ->
+                                val count = vehicles.count { v -> v.status != Status.LIBERADO && v.pendingRepairs.any { it.station == s } }
+                                DropdownMenuItem(
+                                    leadingIcon = { ColorDotRaw(s.color, 14) },
+                                    text = { Text(if (count > 0) "${s.label}  ($count)" else s.label) },
+                                    onClick = { stationFilter = s.name; stationMenu = false },
+                                )
+                            }
+                        }
+                    }
+                    Box(Modifier.width(1.dp).height(24.dp).background(MaterialTheme.colorScheme.outlineVariant))
+                    FilterChip(
+                        selected = modelFilter == null,
+                        onClick = { modelFilter = null },
+                        label = { Text("Todos modelos") },
+                        colors = selectedPrimary(),
+                    )
                     CarModel.entries.forEach { m ->
                         val count = vehicles.count { it.model == m }
                         if (count > 0) {
                             FilterChip(
                                 selected = modelFilter == m.name,
                                 onClick = { modelFilter = if (modelFilter == m.name) null else m.name },
-                                label = { Text("${m.label} · $count") },
+                                label = { Text("${m.label}  $count") },
+                                colors = selectedPrimary(),
                             )
                         }
-                    }
-                }
-            }
-            item {
-                ChipRow {
-                    Station.entries.forEach { s ->
-                        val count = vehicles.count { v -> v.status != Status.LIBERADO && v.pendingRepairs.any { it.station == s } }
-                        FilterChip(
-                            selected = stationFilter == s.name,
-                            onClick = { stationFilter = if (stationFilter == s.name) null else s.name },
-                            label = { Text(if (count > 0) "${s.label} · $count" else s.label) },
-                            leadingIcon = {
-                                Box(Modifier.width(10.dp).height(10.dp).background(s.color, RoundedCornerShape(50)))
-                            },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = s.color,
-                                selectedLabelColor = Color.White,
-                            ),
-                        )
                     }
                 }
             }
 
             if (groups.isEmpty()) {
                 item {
-                    Column(
-                        Modifier.fillMaxWidth().padding(32.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Text(
-                            if (vehicles.isEmpty()) "Nenhum VIN ainda" else "Nada encontrado com esses filtros",
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            if (vehicles.isEmpty()) "Toque em \"Adicionar VIN\" ou importe uma lista pelo menu ⋮"
-                            else "Toque num filtro selecionado para removê-lo",
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                    }
+                    EmptyState(
+                        hasVehicles = vehicles.isNotEmpty(),
+                        onAdd = onAdd,
+                        onImport = { importOpen = true },
+                        onClearFilters = {
+                            statusTab = 0; stationFilter = null; modelFilter = null; query = ""; searching = false
+                        },
+                    )
                 }
             }
 
             groups.forEach { (model, list) ->
                 stickyHeader(key = "h_${model.name}") {
-                    Surface(color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.fillMaxWidth()) {
-                        Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                model.label.uppercase(),
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            )
-                            Text(
-                                "  ${model.code}",
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
-                            )
+                    Surface(color = MaterialTheme.colorScheme.surfaceContainerHighest, modifier = Modifier.fillMaxWidth()) {
+                        Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(model.label, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Text("  ${model.code}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Spacer(Modifier.weight(1f))
-                            val pend = list.count { it.status != Status.LIBERADO }
-                            Text(
-                                "${list.size} VINs · $pend pend.",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            )
+                            Pill(text = "${list.size}", color = MaterialTheme.colorScheme.primary, textColor = MaterialTheme.colorScheme.onPrimary)
                         }
                     }
                 }
                 items(list, key = { it.id }) { v ->
                     VehicleCard(
                         v = v,
-                        onClick = { editing = v; editorOpen = true },
+                        onClick = { onEdit(v) },
                         onStatus = { vm.setStatus(v.id, it) },
+                        onToggleRepair = { vm.toggleRepair(v.id, it) },
                         onDelete = { vm.delete(v.id) },
                     )
                 }
@@ -298,16 +361,15 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
         }
     }
 
-    if (editorOpen) {
-        VehicleEditor(
-            initial = editing,
-            vm = vm,
-            onDismiss = { editorOpen = false },
-        )
-    }
+    if (importOpen) ImportDialog(vm = vm, onDismiss = { importOpen = false })
 
-    if (importOpen) {
-        ImportDialog(vm = vm, onDismiss = { importOpen = false })
+    if (shareOpen) {
+        ShareDialog(
+            vm = vm,
+            all = vehicles,
+            filtered = if (filtersActive) filtered else null,
+            onDismiss = { shareOpen = false },
+        )
     }
 
     confirmClear?.let { what ->
@@ -337,9 +399,10 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
             text = {
                 Text(
                     "Versão ${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})\n\n" +
-                        "Organiza os VINs de massivas por modelo e ordem numérica, com estações de reparo, " +
-                        "previsão e probabilidade de liberação.\n\n" +
-                        "Segure um VIN para mudar o status rapidamente."
+                        "• Toque no VIN para editar.\n" +
+                        "• Use os botões do cartão para mandar ao Túnel ou Liberar.\n" +
+                        "• Toque numa estação do cartão para marcar o reparo como feito.\n" +
+                        "• Segure o cartão para mais opções."
                 )
             },
             confirmButton = { TextButton(onClick = { aboutOpen = false }) { Text("OK") } },
@@ -349,7 +412,7 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
     UpdateDialogs(update, vm)
 
     LaunchedEffect(update) {
-        if (update is com.massivas.fai.UpdateState.UpToDate) {
+        if (update is UpdateState.UpToDate) {
             Toast.makeText(ctx, "Você já está na versão mais recente", Toast.LENGTH_SHORT).show()
             vm.dismissUpdate()
         }
@@ -357,145 +420,147 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
 }
 
 @Composable
-private fun ChipRow(content: @Composable () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) { content() }
-}
+private fun selectedPrimary() = FilterChipDefaults.filterChipColors(
+    selectedContainerColor = MaterialTheme.colorScheme.primary,
+    selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+)
 
 @Composable
-private fun SummaryBar(vehicles: List<Vehicle>, selected: String?, onSelect: (String?) -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().padding(12.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+private fun EmptyState(hasVehicles: Boolean, onAdd: () -> Unit, onImport: () -> Unit, onClearFilters: () -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 48.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        SummaryTile("Total", vehicles.size, MaterialTheme.colorScheme.primary, selected == null, Modifier.weight(1f)) { onSelect(null) }
-        Status.entries.forEach { s ->
-            SummaryTile(
-                when (s) {
-                    Status.PROCESSO -> "Processo"
-                    Status.TUNEL -> "Túnel"
-                    Status.LIBERADO -> "Liberados"
-                },
-                vehicles.count { it.status == s },
-                s.color,
-                selected == s.name,
-                Modifier.weight(1f),
-            ) { onSelect(if (selected == s.name) null else s.name) }
+        if (hasVehicles) {
+            Text("Nenhum VIN com esses filtros", style = MaterialTheme.typography.titleMedium)
+            OutlinedButton(onClick = onClearFilters) { Text("Limpar filtros") }
+        } else {
+            Text("Nenhum VIN ainda", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(
+                "Adicione um VIN ou cole a lista que vocês mandam no WhatsApp — o app separa por modelo sozinho.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Button(onClick = onAdd, modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Adicionar VIN") }
+            OutlinedButton(onClick = onImport, modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Colar lista do WhatsApp") }
         }
     }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun SummaryTile(label: String, count: Int, color: Color, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    Card(
-        modifier = modifier.combinedClickable(onClick = onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = if (selected) color else MaterialTheme.colorScheme.surfaceContainerLow,
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-    ) {
-        Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                "$count",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = if (selected) Color.White else color,
-            )
-            Text(
-                label,
-                fontSize = 11.sp,
-                color = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-            )
-        }
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
-@Composable
-private fun VehicleCard(v: Vehicle, onClick: () -> Unit, onStatus: (Status) -> Unit, onDelete: () -> Unit) {
+private fun VehicleCard(
+    v: Vehicle,
+    onClick: () -> Unit,
+    onStatus: (Status) -> Unit,
+    onToggleRepair: (Station) -> Unit,
+    onDelete: () -> Unit,
+) {
     var menu by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     val released = v.status == Status.LIBERADO
     val overdue = !released && v.forecast != null && v.forecast < System.currentTimeMillis()
+    val green = Status.LIBERADO.color
 
-    Box(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+    Box(Modifier.padding(horizontal = 12.dp, vertical = 5.dp)) {
         Card(
             modifier = Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = { menu = true }),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = if (released) MaterialTheme.colorScheme.surfaceContainer else MaterialTheme.colorScheme.surfaceContainerLow,
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = if (released) 0.dp else 2.dp),
         ) {
             Row(Modifier.height(IntrinsicSize.Min)) {
+                // faixa lateral: probabilidade de liberação (ou verde se liberado)
                 Box(
                     Modifier.width(6.dp).fillMaxHeight()
-                        .background(v.difficulty?.color ?: if (released) Status.LIBERADO.color else Color.Transparent)
+                        .background(if (released) green else v.difficulty?.color ?: Color.Transparent)
                 )
-                Column(Modifier.padding(12.dp).weight(1f)) {
+                Column(Modifier.padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 10.dp).weight(1f)) {
+                    // Linha 1: VIN + cor + status
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             v.vin,
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 17.sp,
+                            fontSize = 19.sp,
+                            textDecoration = if (released) TextDecoration.LineThrough else null,
                         )
                         v.color?.let {
                             Spacer(Modifier.width(8.dp))
-                            ColorDot(it)
-                            Text(" ${it.label}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            ColorDot(it, 14)
                         }
                         Spacer(Modifier.weight(1f))
-                        if (v.status != Status.PROCESSO) Pill(text = v.status.label, color = v.status.color)
+                        when (v.status) {
+                            Status.TUNEL -> Pill(text = "TÚNEL", color = Status.TUNEL.color)
+                            Status.LIBERADO -> Pill(text = "LIBERADO ✓", color = green)
+                            Status.PROCESSO -> v.difficulty?.let { Pill(text = it.label, color = it.color, textColor = it.onColor) }
+                        }
                     }
+
+                    // Reparos: toque para marcar como feito
                     if (v.repairs.isNotEmpty()) {
                         Spacer(Modifier.height(6.dp))
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            v.repairs.forEach { r ->
-                                Pill(text = (if (r.done) "✓ " else "") + r.station.label, color = r.station.color, strike = r.done)
-                            }
-                        }
-                        v.repairs.filter { it.note.isNotBlank() }.forEach { r ->
-                            Row(Modifier.padding(top = 4.dp)) {
-                                Box(
-                                    Modifier.padding(top = 5.dp).width(8.dp).height(8.dp)
-                                        .background(r.station.color, RoundedCornerShape(50))
+                        v.repairs.forEach { r ->
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onToggleRepair(r.station) }
+                                    .heightIn(min = 32.dp)
+                                    .padding(vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Pill(
+                                    text = (if (r.done) "✓ " else "") + r.station.label,
+                                    color = r.station.color,
+                                    strike = r.done,
                                 )
-                                Spacer(Modifier.width(6.dp))
-                                Text(
-                                    r.note,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = if (r.done) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
-                                )
+                                if (r.note.isNotBlank()) {
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        r.note,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = if (r.done) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                                        textDecoration = if (r.done) TextDecoration.LineThrough else null,
+                                    )
+                                }
                             }
                         }
                     }
                     if (v.notes.isNotBlank()) {
                         Text(
                             v.notes,
-                            style = MaterialTheme.typography.bodySmall,
+                            style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 4.dp),
                         )
                     }
-                    if (!released && (v.forecast != null || v.difficulty != null)) {
-                        Spacer(Modifier.height(6.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            v.forecast?.let {
-                                Text(
-                                    (if (overdue) "⚠ Atrasado · " else "⏱ Prev. ") + TextFormat.formatDate(it),
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = if (overdue) Color(0xFFE53935) else MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                Spacer(Modifier.width(10.dp))
+                    if (!released && v.forecast != null) {
+                        Text(
+                            (if (overdue) "⚠ Previsão vencida: " else "⏱ Previsão: ") + TextFormat.formatDate(v.forecast),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (overdue) Color(0xFFE53935) else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                    }
+
+                    // Ações rápidas
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        when (v.status) {
+                            Status.PROCESSO -> {
+                                QuickButton("→ Túnel", Status.TUNEL.color, filled = false) { onStatus(Status.TUNEL) }
+                                QuickButton("✓ Liberar", green, filled = true) { onStatus(Status.LIBERADO) }
                             }
-                            v.difficulty?.let {
-                                Pill(text = "Nível ${it.label}", color = it.color, textColor = it.onColor)
+                            Status.TUNEL -> {
+                                QuickButton("← Processo", Status.PROCESSO.color, filled = false) { onStatus(Status.PROCESSO) }
+                                QuickButton("✓ Liberar", green, filled = true) { onStatus(Status.LIBERADO) }
+                            }
+                            Status.LIBERADO -> {
+                                QuickButton("Desfazer liberação", Status.PROCESSO.color, filled = false) { onStatus(Status.PROCESSO) }
                             }
                         }
                     }
@@ -503,10 +568,10 @@ private fun VehicleCard(v: Vehicle, onClick: () -> Unit, onStatus: (Status) -> U
             }
         }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            DropdownMenuItem(text = { Text("Editar") }, onClick = { menu = false; onClick() })
             Status.entries.filter { it != v.status }.forEach { s ->
                 DropdownMenuItem(text = { Text("Marcar: ${s.label}") }, onClick = { menu = false; onStatus(s) })
             }
-            DropdownMenuItem(text = { Text("Editar") }, onClick = { menu = false; onClick() })
             DropdownMenuItem(text = { Text("Excluir", color = Color(0xFFE53935)) }, onClick = { menu = false; confirmDelete = true })
         }
     }
@@ -521,53 +586,192 @@ private fun VehicleCard(v: Vehicle, onClick: () -> Unit, onStatus: (Status) -> U
     }
 }
 
-private fun share(ctx: android.content.Context, text: String) {
-    val intent = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
-    ctx.startActivity(Intent.createChooser(intent, "Compartilhar lista"))
+@Composable
+private fun QuickButton(text: String, color: Color, filled: Boolean, onClick: () -> Unit) {
+    val pad = PaddingValues(horizontal = 14.dp, vertical = 0.dp)
+    if (filled) {
+        Button(
+            onClick = onClick,
+            colors = ButtonDefaults.buttonColors(containerColor = color, contentColor = Color.White),
+            contentPadding = pad,
+            modifier = Modifier.height(36.dp),
+        ) { Text(text, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
+    } else {
+        OutlinedButton(
+            onClick = onClick,
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = color),
+            contentPadding = pad,
+            modifier = Modifier.height(36.dp),
+        ) { Text(text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
+    }
 }
+
+// ---------------- Enviar lista (WhatsApp) ----------------
+
+@Composable
+private fun ShareDialog(vm: MainViewModel, all: List<Vehicle>, filtered: List<Vehicle>?, onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    var title by remember { mutableStateOf(vm.shareTitle) }
+    var includeReleased by remember { mutableStateOf(vm.shareIncludeReleased) }
+    var includeDate by remember { mutableStateOf(vm.shareIncludeDate) }
+    var onlyFiltered by remember { mutableStateOf(false) }
+    val source = if (onlyFiltered && filtered != null) filtered else all
+    val text = remember(title, includeReleased, includeDate, source) {
+        TextFormat.export(source, title, includeReleased, includeDate)
+    }
+    val count = source.count { includeReleased || it.status != Status.LIBERADO }
+
+    fun saveOptions() {
+        vm.shareTitle = title
+        vm.shareIncludeReleased = includeReleased
+        vm.shareIncludeDate = includeDate
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Enviar lista") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("Título da lista") },
+                    placeholder = { Text("Ex.: MASSIVA FAI - Turno B") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                CheckRow("Incluir liberados", includeReleased) { includeReleased = it }
+                CheckRow("Incluir data e hora", includeDate) { includeDate = it }
+                if (filtered != null) {
+                    CheckRow("Só os VINs filtrados na tela (${filtered.size})", onlyFiltered) { onlyFiltered = it }
+                }
+                Spacer(Modifier.height(6.dp))
+                Text("Prévia · $count VINs", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                ) {
+                    Text(
+                        text.lines().take(12).joinToString("\n") + if (text.lines().size > 12) "\n…" else "",
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(10.dp),
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                saveOptions()
+                val intent = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
+                ctx.startActivity(Intent.createChooser(intent, "Enviar lista"))
+                onDismiss()
+            }) { Text("Enviar") }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = {
+                    saveOptions()
+                    val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    cm.setPrimaryClip(ClipData.newPlainText("Massivas", text))
+                    Toast.makeText(ctx, "Lista copiada", Toast.LENGTH_SHORT).show()
+                    onDismiss()
+                }) { Text("Copiar") }
+                TextButton(onClick = onDismiss) { Text("Cancelar") }
+            }
+        },
+    )
+}
+
+@Composable
+private fun CheckRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable { onChange(!checked) },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Checkbox(checked = checked, onCheckedChange = onChange)
+        Text(label, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+// ---------------- Importar (colar do WhatsApp) ----------------
 
 @Composable
 private fun ImportDialog(vm: MainViewModel, onDismiss: () -> Unit) {
     val ctx = LocalContext.current
     var text by rememberSaveable { mutableStateOf("") }
     val parsed = remember(text) { TextFormat.parse(text) }
-    val withoutModel = parsed.count { it.model == null && vm.findByVin(it.vin) == null }
+    val withoutModel = parsed.filter { it.model == null && vm.findByVin(it.vin) == null }
     var fallback by remember { mutableStateOf(vm.lastModel) }
+
+    LaunchedEffect(Unit) {
+        // Já preenche com o que estiver copiado.
+        val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(ctx)?.toString().orEmpty()
+        if (text.isEmpty() && TextFormat.parse(clip).isNotEmpty()) text = clip
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Importar lista") },
+        title = { Text("Colar lista do WhatsApp") },
         text = {
-            Column {
-                Text(
-                    "Cole a lista (ex.: do WhatsApp). Linhas com o nome do modelo (CS55, UNI-T, C928…) separam os grupos.",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                Spacer(Modifier.height(8.dp))
+            Column(Modifier.verticalScroll(rememberScrollState())) {
                 OutlinedTextField(
                     value = text,
                     onValueChange = { text = it },
-                    modifier = Modifier.fillMaxWidth().height(220.dp),
-                    placeholder = { Text("CS55 - 2\nVB002035 - Liberado ✅\nVB002207 - Ex Ok - Falta Delta") },
+                    modifier = Modifier.fillMaxWidth().height(180.dp),
+                    placeholder = { Text("1 - VB001778 - CS55 - PINTURA(cab.04)\n2 - VB000433 - C928 - TÚNEL") },
+                    textStyle = MaterialTheme.typography.bodySmall,
                 )
                 Spacer(Modifier.height(8.dp))
-                val newCount = parsed.count { vm.findByVin(it.vin) == null }
-                Text("${parsed.size} VINs encontrados · $newCount novos · ${parsed.size - newCount} atualizados")
-                if (withoutModel > 0) {
+                if (parsed.isEmpty()) {
                     Text(
-                        "$withoutModel VINs sem modelo. Usar:",
-                        color = Color(0xFFE65100),
+                        if (text.isBlank()) "Cole a lista acima. O modelo pode vir na mesma linha do VIN ou como título do grupo."
+                        else "Nenhum VIN reconhecido.",
                         style = MaterialTheme.typography.bodySmall,
                     )
-                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        CarModel.entries.forEach { m ->
-                            FilterChip(selected = fallback == m, onClick = { fallback = m }, label = { Text(m.label) })
+                } else {
+                    val newCount = parsed.count { vm.findByVin(it.vin) == null }
+                    Text(
+                        "${parsed.size} VINs · $newCount novos · ${parsed.size - newCount} atualizados",
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    parsed.forEach { p ->
+                        Row(Modifier.padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(p.vin, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                (p.model ?: vm.findByVin(p.vin)?.model)?.label ?: "sem modelo",
+                                fontSize = 12.sp,
+                                color = if (p.model == null && vm.findByVin(p.vin) == null) Color(0xFFE65100) else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            when (p.status) {
+                                Status.TUNEL -> Pill(text = "Túnel", color = Status.TUNEL.color)
+                                Status.LIBERADO -> Pill(text = "Liberado", color = Status.LIBERADO.color)
+                                else -> p.repairs.firstOrNull()?.let { Pill(text = it.station.label, color = it.station.color) }
+                            }
+                        }
+                    }
+                    if (withoutModel.isNotEmpty()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "${withoutModel.size} VINs sem modelo. Usar:",
+                            color = Color(0xFFE65100),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            CarModel.entries.forEach { m ->
+                                FilterChip(selected = fallback == m, onClick = { fallback = m }, label = { Text(m.label) }, colors = selectedPrimary())
+                            }
                         }
                     }
                 }
             }
         },
         confirmButton = {
-            TextButton(enabled = parsed.isNotEmpty(), onClick = {
+            TextButton(enabled = parsed.isNotEmpty() && (withoutModel.isEmpty() || fallback != null), onClick = {
                 val r = vm.importParsed(parsed, fallback)
                 Toast.makeText(ctx, "${r.added} adicionados, ${r.updated} atualizados", Toast.LENGTH_LONG).show()
                 onDismiss()

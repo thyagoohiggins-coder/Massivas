@@ -42,6 +42,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         get() = enumOrNull<CarModel>(prefs.getString("lastModel", null))
         set(v) { prefs.edit().putString("lastModel", v?.name).apply() }
 
+    var shareTitle: String
+        get() = prefs.getString("shareTitle", null) ?: "MASSIVA FAI"
+        set(v) { prefs.edit().putString("shareTitle", v).apply() }
+
     private var checkedOnStart = false
 
     init {
@@ -105,6 +109,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (it.id == id) it.copy(status = status, updatedAt = System.currentTimeMillis()) else it
     })
 
+    fun toggleRepair(id: String, station: Station) = persist(_vehicles.value.map { v ->
+        if (v.id != id) v else v.copy(
+            repairs = v.repairs.map { if (it.station == station) it.copy(done = !it.done) else it },
+            updatedAt = System.currentTimeMillis(),
+        )
+    })
+
+    var shareIncludeReleased: Boolean
+        get() = prefs.getBoolean("shareReleased", true)
+        set(v) { prefs.edit().putBoolean("shareReleased", v).apply() }
+    var shareIncludeDate: Boolean
+        get() = prefs.getBoolean("shareDate", true)
+        set(v) { prefs.edit().putBoolean("shareDate", v).apply() }
+
     fun clearReleased() = persist(_vehicles.value.filterNot { it.status == Status.LIBERADO })
 
     fun clearAll() = persist(emptyList())
@@ -122,6 +140,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     status = p.status ?: old.status,
                     repairs = if (p.repairs.isNotEmpty()) p.repairs else if (p.status == Status.LIBERADO || p.status == Status.TUNEL) old.repairs.map { it.copy(done = true) } else old.repairs,
                     notes = p.notes.ifBlank { old.notes },
+                    forecast = p.forecast ?: old.forecast,
+                    difficulty = p.difficulty ?: old.difficulty,
                     updatedAt = System.currentTimeMillis(),
                 )
                 updated++
@@ -130,6 +150,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 list += Vehicle(
                     id = newId(), vin = p.vin, model = model,
                     status = p.status ?: Status.PROCESSO, repairs = p.repairs, notes = p.notes,
+                    forecast = p.forecast, difficulty = p.difficulty,
                 )
                 added++
             }

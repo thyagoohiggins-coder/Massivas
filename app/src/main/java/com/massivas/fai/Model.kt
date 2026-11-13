@@ -5,17 +5,15 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.text.Normalizer
 
-/** Modelos de veículos, na ordem em que aparecem na lista. */
-enum class CarModel(val code: String, val label: String, val aliases: List<String>) {
-    S202("S202", "Uni-T", listOf("S202", "UNI-T", "UNI T", "UNIT")),
-    C655("C655", "CS55", listOf("C655", "CS55", "CS 55", "CS55 INFINITY")),
-    C928("C928", "CS75", listOf("C928", "CS75", "CS 75")),
-    T1E_ADAS("T1E ADAS", "Tiggo 7", listOf("T1E ADAS", "T1E", "TIGGO 7", "TIGGO 7 ADAS", "TIGGO7")),
-    T1E_ICE_LOW("T1E ICE LOW", "Tiggo 7 Ice Low", listOf("T1E ICE LOW", "T1E ICE", "TIGGO 7 ICE LOW", "TIGGO 7 ICE", "TIGGO7 ICE LOW")),
-    T19_ICE_LOW("T19 ICE LOW", "Tiggo 5 Ice Low", listOf("T19 ICE LOW", "T19", "T19 ICE", "TIGGO 5", "TIGGO 5 ICE LOW", "TIGGO5")),
-    T18("T18", "Tiggo 8 Ice", listOf("T18", "TIGGO 8", "TIGGO 8 ICE", "TIGGO8"));
-
-    val title: String get() = "$code ($label)"
+/** Modelos de veículos, na ordem em que aparecem na lista. `short` é o nome usado no WhatsApp. */
+enum class CarModel(val code: String, val label: String, val short: String, val aliases: List<String>) {
+    S202("S202", "Uni-T", "UNI-T", listOf("S202", "UNI-T", "UNI T", "UNIT")),
+    C655("C655", "CS55", "CS55", listOf("C655", "CS55", "CS 55", "CS55 INFINITY", "CS55 PLUS")),
+    C928("C928", "CS75", "C928", listOf("C928", "CS75", "CS 75", "CS75 PLUS")),
+    T1E_ADAS("T1E ADAS", "Tiggo 7", "T1E ADAS", listOf("T1E ADAS", "T1E", "TIGGO 7", "TIGGO7", "TIGGO 7 ADAS", "TIGGO7 ADAS")),
+    T1E_ICE_LOW("T1E ICE LOW", "Tiggo 7 Ice Low", "T1E ICE LOW", listOf("T1E ICE LOW", "T1E ICE", "T1E LOW", "TIGGO 7 ICE LOW", "TIGGO 7 ICE", "TIGGO7 ICE LOW", "TIGGO7 ICE")),
+    T19_ICE_LOW("T19 ICE LOW", "Tiggo 5 Ice Low", "T19", listOf("T19 ICE LOW", "T19 ICE", "T19", "TIGGO 5", "TIGGO5", "TIGGO 5X", "TIGGO 5 ICE LOW", "TIGGO 5 ICE")),
+    T18("T18", "Tiggo 8 Ice", "T18", listOf("T18", "TIGGO 8", "TIGGO8", "TIGGO 8 ICE"));
 
     companion object {
         /** Reconhece o modelo num cabeçalho como "CS55 INFINITY - 4" ou "UNI-T - 2". */
@@ -26,7 +24,7 @@ enum class CarModel(val code: String, val label: String, val aliases: List<Strin
             var bestLen = 0
             for (m in entries) for (a in m.aliases) {
                 val alias = normalize(a)
-                val matches = n == alias || n.startsWith("$alias ") || n.startsWith("$alias-")
+                val matches = n == alias || n.startsWith("$alias ") || n.startsWith("$alias-") || n.startsWith("$alias(")
                 if (matches && alias.length > bestLen) {
                     best = m; bestLen = alias.length
                 }
@@ -45,17 +43,17 @@ enum class CarColor(val label: String, val swatch: Color) {
 
 /** Estações de reparo — cada uma com sua cor. */
 enum class Station(val label: String, val color: Color, val keywords: List<String>) {
-    PINTURA("Pintura", Color(0xFF1E88E5), listOf("PINTURA")),
-    POLIMENTO("Polimento", Color(0xFF8E24AA), listOf("POLIMENTO")),
-    EX_OK("EX-OK", Color(0xFF2E7D32), listOf("EX OK", "EX-OK", "EXOK")),
-    SHOWER("Reparo de Shower", Color(0xFF00ACC1), listOf("SHOWER")),
-    PISTA("Reparo de Pista", Color(0xFF6D4C41), listOf("PISTA")),
-    FUNILARIA("Funilaria", Color(0xFF546E7A), listOf("FUNILARIA")),
-    ELETRICA("Elétrica", Color(0xFF3949AB), listOf("ELETRICA")),
-    ALINHAMENTO("Alinhamento", Color(0xFF00897B), listOf("ALINHAMENTO")),
+    PINTURA("Pintura", Color(0xFF1E88E5), listOf("PINTURA", "PINT")),
+    POLIMENTO("Polimento", Color(0xFF8E24AA), listOf("POLIMENTO", "POLIR")),
+    EX_OK("EX-OK", Color(0xFF2E7D32), listOf("EX OK", "EX-OK", "EXOK", "EX.OK", "EX - OK")),
+    SHOWER("Reparo de Shower", Color(0xFF00ACC1), listOf("REPARO DE SHOWER", "SHOWER")),
+    PISTA("Reparo de Pista", Color(0xFF6D4C41), listOf("REPARO DE PISTA", "PISTA")),
+    FUNILARIA("Funilaria", Color(0xFF607D8B), listOf("FUNILARIA", "FUNIL")),
+    ELETRICA("Elétrica", Color(0xFF3949AB), listOf("ELETRICA", "ELETRICO")),
+    ALINHAMENTO("Alinhamento", Color(0xFF00897B), listOf("ALINHAMENTO", "ALINH")),
     TESTE_ROLO("Teste de Rolo", Color(0xFFD81B60), listOf("TESTE DE ROLO", "ROLO")),
-    UNDERBODY("Underbody", Color(0xFF827717), listOf("UNDERBODY", "UNDER BODY")),
-    ADAS("Adas", Color(0xFF7C4DFF), listOf("ADAS"));
+    UNDERBODY("Underbody", Color(0xFF827717), listOf("UNDERBODY", "UNDER BODY", "UNDER")),
+    ADAS("Adas", Color(0xFF7C4DFF), listOf("CALIBRACAO ADAS", "ADAS"));
 }
 
 enum class Status(val label: String, val color: Color) {
@@ -65,10 +63,10 @@ enum class Status(val label: String, val color: Color) {
 }
 
 /** Probabilidade de liberação. */
-enum class Difficulty(val label: String, val color: Color, val onColor: Color) {
-    FACIL("Fácil", Color(0xFFFBC02D), Color(0xFF212121)),
-    MEDIO("Médio", Color(0xFFFB8C00), Color.White),
-    DIFICIL("Difícil", Color(0xFFE53935), Color.White);
+enum class Difficulty(val label: String, val color: Color, val onColor: Color, val emoji: String) {
+    FACIL("Fácil", Color(0xFFFBC02D), Color(0xFF212121), "🟡"),
+    MEDIO("Médio", Color(0xFFFB8C00), Color.White, "🟠"),
+    DIFICIL("Difícil", Color(0xFFE53935), Color.White, "🔴");
 }
 
 data class Repair(val station: Station, val note: String = "", val done: Boolean = false)
@@ -143,6 +141,14 @@ fun normalize(s: String): String =
         .uppercase()
         .replace(Regex("\\s+"), " ")
         .trim()
+
+/** Igual a [normalize], mas mantém o tamanho do texto (posição a posição). */
+fun fold(s: String): String = buildString(s.length) {
+    for (c in s) {
+        val base = Normalizer.normalize(c.toString(), Normalizer.Form.NFD).firstOrNull() ?: c
+        append(base.uppercaseChar())
+    }
+}
 
 fun cleanVin(s: String): String = s.uppercase().filter { it.isLetterOrDigit() }
 

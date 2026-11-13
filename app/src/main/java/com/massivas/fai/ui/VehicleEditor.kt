@@ -4,42 +4,50 @@ import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.content.Context
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -53,6 +61,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -60,8 +69,6 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.massivas.fai.CarColor
 import com.massivas.fai.CarModel
 import com.massivas.fai.Difficulty
@@ -74,10 +81,12 @@ import com.massivas.fai.Vehicle
 import com.massivas.fai.cleanVin
 import java.util.Calendar
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+/** Tela cheia para adicionar/editar um VIN. O botão Salvar fica sempre visível no rodapé. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun VehicleEditor(initial: Vehicle?, vm: MainViewModel, onDismiss: () -> Unit) {
+fun VehicleEditor(initial: Vehicle?, vm: MainViewModel, onClose: () -> Unit) {
     val ctx = LocalContext.current
+    val focus = LocalFocusManager.current
     var current by remember { mutableStateOf(initial) }
     var vin by remember { mutableStateOf(initial?.vin ?: "") }
     var model by remember { mutableStateOf(initial?.model ?: vm.lastModel) }
@@ -88,8 +97,15 @@ fun VehicleEditor(initial: Vehicle?, vm: MainViewModel, onDismiss: () -> Unit) {
     var forecast by remember { mutableStateOf(initial?.forecast) }
     var difficulty by remember { mutableStateOf(initial?.difficulty) }
     var notes by remember { mutableStateOf(initial?.notes ?: "") }
+    var moreOpen by remember {
+        mutableStateOf(initial != null && (initial.color != null || initial.forecast != null || initial.difficulty != null || initial.notes.isNotBlank()))
+    }
     var confirmDelete by remember { mutableStateOf(false) }
+    var savedCount by remember { mutableStateOf(0) }
     val vinFocus = remember { FocusRequester() }
+    val scroll = rememberScrollState()
+
+    BackHandler(onBack = onClose)
 
     val cleaned = cleanVin(vin)
     val duplicate = if (cleaned.isEmpty()) null else vm.findByVin(cleaned)?.takeIf { it.id != current?.id }
@@ -135,194 +151,231 @@ fun VehicleEditor(initial: Vehicle?, vm: MainViewModel, onDismiss: () -> Unit) {
         )
         vm.save(v)
         if (next) {
+            savedCount++
             Toast.makeText(ctx, "${v.vin} salvo", Toast.LENGTH_SHORT).show()
             reset()
-        } else onDismiss()
+        } else onClose()
     }
 
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Scaffold(
-            modifier = Modifier.fillMaxSize(),
-            topBar = {
-                TopAppBar(
-                    navigationIcon = { IconButton(onClick = onDismiss) { Icon(Icons.Filled.Close, "Fechar") } },
-                    title = { Text(if (current == null) "Novo VIN" else "Editar ${current?.vin}") },
-                    actions = {
-                        if (current != null) {
-                            IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Filled.Delete, "Excluir") }
-                        }
-                    },
-                )
-            },
-            bottomBar = {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
+                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary,
+                ),
+                navigationIcon = { IconButton(onClick = onClose) { Icon(Icons.Filled.Close, "Fechar") } },
+                title = {
+                    Column {
+                        Text(if (current == null) "Novo VIN" else "Editar VIN", fontWeight = FontWeight.Bold)
+                        if (savedCount > 0) Text("$savedCount salvos nesta sequência", fontSize = 12.sp)
+                    }
+                },
+                actions = {
+                    if (current != null) {
+                        IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Filled.Delete, "Excluir") }
+                    }
+                },
+            )
+        },
+        bottomBar = {
+            Surface(tonalElevation = 3.dp, shadowElevation = 8.dp) {
                 Row(
-                    Modifier.fillMaxWidth().imePadding().padding(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(horizontal = 16.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     if (current == null) {
-                        OutlinedButton(onClick = { trySave(next = true) }, modifier = Modifier.weight(1f)) {
-                            Text("Salvar e próximo")
+                        OutlinedButton(
+                            onClick = { trySave(next = true) },
+                            modifier = Modifier.weight(1f).height(52.dp),
+                        ) { Text("Salvar e próximo", fontWeight = FontWeight.SemiBold) }
+                    }
+                    Button(
+                        onClick = { trySave(next = false) },
+                        modifier = Modifier.weight(1f).height(52.dp),
+                    ) { Text("Salvar", fontWeight = FontWeight.Bold, fontSize = 16.sp) }
+                }
+            }
+        },
+    ) { padding ->
+        Column(
+            Modifier
+                .padding(padding)
+                .fillMaxSize()
+                .verticalScroll(scroll)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
+        ) {
+            // VIN
+            OutlinedTextField(
+                value = vin,
+                onValueChange = { vin = it.uppercase().filter { c -> c.isLetterOrDigit() } },
+                label = { Text("VIN") },
+                placeholder = { Text("Ex.: VB002035") },
+                singleLine = true,
+                textStyle = MaterialTheme.typography.headlineSmall.copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold),
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.Characters,
+                    keyboardType = KeyboardType.Ascii,
+                    autoCorrectEnabled = false,
+                    imeAction = ImeAction.Done,
+                ),
+                keyboardActions = KeyboardActions(onDone = { focus.clearFocus() }),
+                supportingText = {
+                    if (duplicate != null) Text(
+                        "Já cadastrado (${duplicate.model.label} · ${duplicate.status.label}). Salvar vai atualizar.",
+                        color = Color(0xFFE65100),
+                    )
+                },
+                modifier = Modifier.fillMaxWidth().focusRequester(vinFocus),
+            )
+
+            // Modelo
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SectionTitle("Modelo")
+                Grid(CarModel.entries.toList(), columns = 2) { m, mod ->
+                    SelectTile(selected = model == m, onClick = { model = m; modelTouched = true }, modifier = mod) { c ->
+                        Column {
+                            Text(m.label, fontWeight = FontWeight.Bold, color = c)
+                            Text(m.code, fontSize = 11.sp, color = c.copy(alpha = 0.75f))
                         }
                     }
-                    Button(onClick = { trySave(next = false) }, modifier = Modifier.weight(1f)) { Text("Salvar") }
                 }
-            },
-        ) { padding ->
-            Column(
-                Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                OutlinedTextField(
-                    value = vin,
-                    onValueChange = { vin = it.uppercase() },
-                    label = { Text("VIN") },
-                    singleLine = true,
-                    textStyle = MaterialTheme.typography.titleLarge.copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold),
-                    keyboardOptions = KeyboardOptions(
-                        capitalization = KeyboardCapitalization.Characters,
-                        keyboardType = KeyboardType.Ascii,
-                        autoCorrectEnabled = false,
-                        imeAction = ImeAction.Done,
-                    ),
-                    supportingText = {
-                        when {
-                            duplicate != null -> Text(
-                                "Já existe (${duplicate.model.label}, ${duplicate.status.label}) — será atualizado",
-                                color = Color(0xFFE65100),
-                            )
-                            cleaned.isNotEmpty() -> Text("${cleaned.length} caracteres")
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth().focusRequester(vinFocus),
-                )
+            }
 
-                Section("Modelo") {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        CarModel.entries.forEach { m ->
-                            FilterChip(
-                                selected = model == m,
-                                onClick = { model = m; modelTouched = true },
-                                label = {
-                                    Column {
-                                        Text(m.label, fontWeight = FontWeight.SemiBold)
-                                        Text(m.code, fontSize = 10.sp)
-                                    }
+            // Estações
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SectionTitle("Estações de reparo")
+                Grid(Station.entries.toList(), columns = 2) { s, mod ->
+                    val idx = repairs.indexOfFirst { it.station == s }
+                    SelectTile(
+                        selected = idx >= 0,
+                        onClick = { if (idx >= 0) repairs.removeAt(idx) else repairs.add(Repair(s)) },
+                        modifier = mod,
+                        selectedColor = s.color,
+                        selectedContentColor = Color.White,
+                        accent = s.color,
+                    ) { c ->
+                        Text(s.label, fontWeight = FontWeight.SemiBold, color = c, modifier = Modifier.weight(1f))
+                        if (idx >= 0) Text("✓", color = c, fontWeight = FontWeight.Bold)
+                    }
+                }
+                repairs.forEachIndexed { i, r ->
+                    RepairNoteRow(
+                        repair = r,
+                        onNote = { repairs[i] = r.copy(note = it) },
+                        onDone = { repairs[i] = r.copy(done = it) },
+                    )
+                }
+            }
+
+            // Status
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SectionTitle("Status")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.height(IntrinsicSize.Min)) {
+                    Status.entries.forEach { s ->
+                        SelectTile(
+                            selected = status == s,
+                            onClick = { status = s },
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
+                            selectedColor = s.color,
+                            selectedContentColor = Color.White,
+                        ) { c ->
+                            Text(
+                                when (s) {
+                                    Status.PROCESSO -> "No processo"
+                                    Status.TUNEL -> "Túnel"
+                                    Status.LIBERADO -> "Liberado ✅"
                                 },
+                                color = c,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 14.sp,
                             )
                         }
                     }
                 }
+            }
 
-                Section("Cor (opcional)") {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        CarColor.entries.forEach { c ->
-                            FilterChip(
+            // Mais detalhes (opcionais)
+            Surface(
+                onClick = { moreOpen = !moreOpen },
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceContainer,
+            ) {
+                Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Mais detalhes (opcional)", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "Cor, previsão, probabilidade de liberação e observações",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Icon(if (moreOpen) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown, null)
+                }
+            }
+
+            AnimatedVisibility(visible = moreOpen) {
+                Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SectionTitle("Cor")
+                        Grid(CarColor.entries.toList(), columns = 4, spacing = 6.dp) { c, mod ->
+                            SelectTile(
                                 selected = color == c,
                                 onClick = { color = if (color == c) null else c },
-                                label = { Text(c.label) },
-                                leadingIcon = { ColorDot(c) },
-                            )
-                        }
-                    }
-                }
-
-                Section("Status") {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Status.entries.forEach { s ->
-                            FilterChip(
-                                selected = status == s,
-                                onClick = { status = s },
-                                label = { Text(s.label) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = s.color,
-                                    selectedLabelColor = Color.White,
-                                ),
-                            )
-                        }
-                    }
-                }
-
-                Section("Estações de reparo") {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Station.entries.forEach { s ->
-                            val idx = repairs.indexOfFirst { it.station == s }
-                            FilterChip(
-                                selected = idx >= 0,
-                                onClick = { if (idx >= 0) repairs.removeAt(idx) else repairs.add(Repair(s)) },
-                                label = { Text(s.label) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = s.color,
-                                    selectedLabelColor = Color.White,
-                                    labelColor = s.color,
-                                ),
-                            )
-                        }
-                    }
-                    repairs.forEachIndexed { i, r ->
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = r.station.color.copy(alpha = 0.10f)),
-                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                        ) {
-                            Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Pill(text = r.station.label, color = r.station.color, strike = r.done)
-                                    Spacer(Modifier.weight(1f))
-                                    Text("Concluído", fontSize = 12.sp)
-                                    Checkbox(checked = r.done, onCheckedChange = { repairs[i] = r.copy(done = it) })
+                                modifier = mod,
+                            ) { tc ->
+                                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                                    ColorDot(c, 18)
+                                    Text(c.label, fontSize = 12.sp, color = tc)
                                 }
-                                OutlinedTextField(
-                                    value = r.note,
-                                    onValueChange = { repairs[i] = r.copy(note = it) },
-                                    placeholder = { Text("Descrição do reparo (opcional)") },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                                )
                             }
                         }
                     }
-                }
 
-                Section("Previsão de reparo (opcional)") {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedButton(onClick = { pickDateTime(ctx, forecast) { forecast = it } }) {
-                            Text(forecast?.let { TextFormat.formatDate(it) } ?: "Escolher data e hora")
-                        }
-                        if (forecast != null) {
-                            Spacer(Modifier.width(8.dp))
-                            TextButton(onClick = { forecast = null }) { Text("Limpar") }
-                        }
-                    }
-                }
-
-                Section("Probabilidade de liberação (opcional)") {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Difficulty.entries.forEach { d ->
-                            FilterChip(
-                                selected = difficulty == d,
-                                onClick = { difficulty = if (difficulty == d) null else d },
-                                label = { Text(d.label) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = d.color,
-                                    selectedLabelColor = d.onColor,
-                                ),
-                                leadingIcon = { ColorDotRaw(d.color) },
-                            )
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SectionTitle("Probabilidade de liberação")
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Difficulty.entries.forEach { d ->
+                                SelectTile(
+                                    selected = difficulty == d,
+                                    onClick = { difficulty = if (difficulty == d) null else d },
+                                    modifier = Modifier.weight(1f),
+                                    selectedColor = d.color,
+                                    selectedContentColor = d.onColor,
+                                    accent = d.color,
+                                ) { c -> Text(d.label, color = c, fontWeight = FontWeight.SemiBold) }
+                            }
                         }
                     }
-                }
 
-                OutlinedTextField(
-                    value = notes,
-                    onValueChange = { notes = it },
-                    label = { Text("Observações (opcional)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2,
-                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                )
-                Spacer(Modifier.height(24.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SectionTitle("Previsão do reparo")
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            OutlinedButton(
+                                onClick = { pickDateTime(ctx, forecast) { forecast = it } },
+                                modifier = Modifier.height(48.dp),
+                            ) { Text("⏱  " + (forecast?.let { TextFormat.formatDate(it) } ?: "Escolher data e hora")) }
+                            if (forecast != null) {
+                                Spacer(Modifier.width(8.dp))
+                                TextButton(onClick = { forecast = null }) { Text("Limpar") }
+                            }
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = notes,
+                        onValueChange = { notes = it },
+                        label = { Text("Observações") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2,
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                    )
+                }
             }
+            Spacer(Modifier.height(8.dp))
         }
     }
 
@@ -335,7 +388,7 @@ fun VehicleEditor(initial: Vehicle?, vm: MainViewModel, onDismiss: () -> Unit) {
                     onClick = {
                         current?.let { vm.delete(it.id) }
                         confirmDelete = false
-                        onDismiss()
+                        onClose()
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFE53935)),
                 ) { Text("Excluir") }
@@ -346,12 +399,36 @@ fun VehicleEditor(initial: Vehicle?, vm: MainViewModel, onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun Section(title: String, content: @Composable () -> Unit) {
-    Column {
-        Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-        Spacer(Modifier.height(6.dp))
-        content()
+private fun RepairNoteRow(repair: Repair, onNote: (String) -> Unit, onDone: (Boolean) -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = repair.station.color.copy(alpha = 0.10f),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(Modifier.height(IntrinsicSize.Min)) {
+            Box(Modifier.width(5.dp).fillMaxHeight().background(repair.station.color))
+            Column(Modifier.padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        repair.station.label,
+                        fontWeight = FontWeight.Bold,
+                        color = repair.station.color,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text("Concluído", fontSize = 12.sp)
+                    Checkbox(checked = repair.done, onCheckedChange = onDone)
+                }
+                OutlinedTextField(
+                    value = repair.note,
+                    onValueChange = onNote,
+                    placeholder = { Text("O que falta? (opcional)") },
+                    modifier = Modifier.fillMaxWidth().padding(end = 8.dp),
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                )
+            }
+        }
     }
+    HorizontalDivider(color = Color.Transparent)
 }
 
 private fun pickDateTime(ctx: Context, initial: Long?, onPicked: (Long) -> Unit) {

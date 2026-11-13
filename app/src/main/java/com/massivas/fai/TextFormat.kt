@@ -1,6 +1,7 @@
 package com.massivas.fai
 
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -10,20 +11,35 @@ data class ParsedVehicle(
     val status: Status?,
     val repairs: List<Repair>,
     val notes: String,
+    val forecast: Long? = null,
+    val difficulty: Difficulty? = null,
 )
 
 /**
- * Lê listas no formato usado no WhatsApp, por exemplo:
+ * Lê listas do WhatsApp nos formatos:
  *
- *   CS55 INFINITY - 4
- *   VB002035 - Liberado ✅
+ *   1 - VB001778 - CS55 - SECANDO(terrão)⚠️      (modelo na mesma linha)
+ *   2 - VB000433 - C928 - PINTURA(cab.04)
+ *
+ *   CS55 INFINITY - 4                            (modelo como título do grupo)
  *   VB002207 - Ex Ok - Falta Delta, Pestana FR LH Am.
- *   UNI-T - 2
- *   VB006263 - Polimento
  */
 object TextFormat {
-    private val vinLine = Regex("^\\s*[•*\\-]?\\s*([A-Za-z0-9]{6,17})\\b\\s*(?:[-–—:]+\\s*(.*))?$")
-    private val dateFmt = SimpleDateFormat("dd/MM HH:mm", Locale("pt", "BR"))
+    private val ptBR = Locale("pt", "BR")
+    private val dateFmt = SimpleDateFormat("dd/MM HH:mm", ptBR)
+
+    // VB001778 (letras + números) ou VIN completo de 17 caracteres.
+    private val vinRegex = Regex("(?<![A-Za-z0-9])([A-Za-z]{1,4}[0-9]{5,13}|[A-HJ-NPR-Za-hj-npr-z0-9]{17})(?![A-Za-z0-9])")
+    private val indexPrefix = Regex("^[\\s\\d*•#.)(\\-–—:]*$")
+    private val forecastRegex = Regex("(?:⏱|PREV\\.?|PREVISAO:?)\\s*(\\d{1,2})/(\\d{1,2})(?:/\\d{2,4})?\\s+(\\d{1,2})[:h](\\d{2})", RegexOption.IGNORE_CASE)
+
+    private fun wordRegex(kw: String) =
+        Regex("(?<![A-Z0-9])" + Regex.escape(normalize(kw)).replace(" ", "\\E\\s*\\Q") + "(?![A-Z0-9])")
+
+    private val modelPatterns: List<Pair<CarModel, Regex>> =
+        CarModel.entries.flatMap { m -> m.aliases.map { m to wordRegex(it) } }
+    private val stationPatterns: List<Pair<Station, Regex>> =
+        Station.entries.flatMap { s -> s.keywords.map { s to wordRegex(it) } }
 
     fun parse(text: String): List<ParsedVehicle> {
         val out = mutableListOf<ParsedVehicle>()
@@ -32,21 +48,27 @@ object TextFormat {
             val line = raw.trim().trim('*', '_', '~').trim()
             if (line.isEmpty()) continue
 
-            val m = vinLine.matchEntire(line)
-            val token = m?.groupValues?.get(1)
-            if (m != null && token != null && token.count { it.isDigit() } >= 4) {
-                out += parseVehicle(cleanVin(token), m.groupValues[2].trim(), currentModel)
+            val vinMatch = vinRegex.findAll(line).firstOrNull { m ->
+                val t = m.value
+                t.count { it.isDigit() } >= 4 && t.any { it.isLetter() }
+            }
+            if (vinMatch != null) {
+                val before = line.substring(0, vinMatch.range.first)
+                val after = line.substring(vinMatch.range.last + 1)
+                val rest = if (indexPrefix.matches(before)) after else "$before $after"
+                out += parseVehicle(cleanVin(vinMatch.value), rest, currentModel)
                 continue
             }
+
             val header = CarModel.fromHeader(line)
             if (header != null) {
                 currentModel = header
                 continue
             }
-            // Linha de continuação: junta ao último reparo/observação.
-            val last = out.lastOrNull() ?: continue
             val n = normalize(line)
             if (n.startsWith("MASSIVA") || n.startsWith("TOTAL")) continue
+            // Linha de continuação: junta ao último reparo/observação.
+            val last = out.lastOrNull() ?: continue
             out[out.lastIndex] = if (last.repairs.isNotEmpty()) {
                 val reps = last.repairs.toMutableList()
                 val r = reps.last()
@@ -60,74 +82,136 @@ object TextFormat {
         return out.associateBy { it.vin }.values.toList()
     }
 
-    private fun parseVehicle(vin: String, rest: String, model: CarModel?): ParsedVehicle {
-        val n = normalize(rest)
-        if (n.contains("TUNEL")) return ParsedVehicle(vin, model, Status.TUNEL, emptyList(), "")
-        if (n.contains("LIBERADO") && !n.contains("NAO LIBERADO")) {
-            return ParsedVehicle(vin, model, Status.LIBERADO, emptyList(), "")
-        }
-        if (rest.isBlank()) return ParsedVehicle(vin, model, null, emptyList(), "")
+    /** Analisa o texto da linha depois do VIN: modelo, status, estações, previsão e nível. */
+    private fun parseVehicle(vin: String, restRaw: String, headerModel: CarModel?): ParsedVehicle {
+        val text = restRaw
+        val folded = fold(text)
+        val removed = BooleanArray(text.length)
+        fun remove(r: IntRange) { for (i in r) if (i in removed.indices) removed[i] = true }
 
-        val parts = rest.split(Regex("\\s+[-–—]\\s+|\\s*[-–—]\\s+(?=\\S)"), limit = 2)
-        val head = normalize(parts[0])
-        val note = parts.getOrNull(1)?.trim().orEmpty()
-        val stations = detectStations(head)
-        return if (stations.isNotEmpty()) {
-            val repairs = stations.mapIndexed { i, s -> Repair(s, if (i == 0) note else "") }
-            ParsedVehicle(vin, model, Status.PROCESSO, repairs, "")
-        } else {
-            ParsedVehicle(vin, model, Status.PROCESSO, emptyList(), rest.trim())
+        // Modelo (o maior apelido encontrado)
+        var model: CarModel? = null
+        modelPatterns
+            .mapNotNull { (m, re) -> re.find(folded)?.let { m to it.range } }
+            .maxByOrNull { it.second.last - it.second.first }
+            ?.let { (m, r) -> model = m; remove(r) }
+
+        // Previsão e nível
+        var forecast: Long? = null
+        forecastRegex.find(text)?.let { f ->
+            val (d, mo, h, mi) = f.destructured
+            val cal = Calendar.getInstance()
+            cal.set(cal.get(Calendar.YEAR), mo.toInt() - 1, d.toInt(), h.toInt(), mi.toInt(), 0)
+            cal.set(Calendar.MILLISECOND, 0)
+            forecast = cal.timeInMillis
+            remove(f.range)
         }
+        var difficulty: Difficulty? = null
+        for (dif in Difficulty.entries) {
+            val i = text.indexOf(dif.emoji)
+            if (i >= 0) { difficulty = dif; remove(i until i + dif.emoji.length) }
+        }
+        Regex("NIVEL\\s*(FACIL|MEDIO|DIFICIL)").find(folded)?.let {
+            difficulty = when (it.groupValues[1]) { "FACIL" -> Difficulty.FACIL; "MEDIO" -> Difficulty.MEDIO; else -> Difficulty.DIFICIL }
+            remove(it.range)
+        }
+
+        // Status
+        var status: Status? = null
+        Regex("(?<![A-Z])TUNEL(\\s+DE\\s+LIBERACAO)?").find(folded)?.let { status = Status.TUNEL; remove(it.range) }
+        if (status == null && !folded.contains("NAO LIBERAD")) {
+            Regex("(?<![A-Z])LIBERAD[OA]S?(?![A-Z])").find(folded)?.let { status = Status.LIBERADO; remove(it.range) }
+        }
+        text.indexOf("✅").takeIf { it >= 0 }?.let { remove(it until it + 1) }
+
+        // Estações (na ordem em que aparecem). Texto entre parênteses logo depois vira a descrição.
+        val stationHits = mutableListOf<Pair<Station, IntRange>>()
+        for ((s, re) in stationPatterns) {
+            for (m in re.findAll(folded)) {
+                if (m.range.any { removed[it] }) continue
+                if (stationHits.any { (os, r) -> os == s || r.first <= m.range.last && m.range.first <= r.last }) continue
+                stationHits += s to m.range
+            }
+        }
+        stationHits.sortBy { it.second.first }
+        val repairs = mutableListOf<Repair>()
+        for ((s, r) in stationHits) {
+            remove(r)
+            var note = ""
+            val paren = Regex("^\\s*\\(([^)]*)\\)").find(text.substring(r.last + 1))
+            if (paren != null) {
+                note = paren.groupValues[1].trim()
+                remove((r.last + 1)..(r.last + paren.range.last + 1))
+            }
+            repairs += Repair(s, note)
+        }
+
+        val leftover = cleanup(text.filterIndexed { i, _ -> !removed[i] })
+        var notes = ""
+        if (leftover.count { it.isLetterOrDigit() } >= 3) {
+            if (repairs.size == 1 && repairs[0].note.isEmpty()) repairs[0] = repairs[0].copy(note = leftover)
+            else notes = leftover
+        }
+
+        val anything = repairs.isNotEmpty() || notes.isNotEmpty() || forecast != null || difficulty != null
+        return ParsedVehicle(
+            vin = vin,
+            model = model ?: headerModel,
+            status = status ?: if (anything) Status.PROCESSO else null,
+            repairs = repairs,
+            notes = notes,
+            forecast = forecast,
+            difficulty = difficulty,
+        )
     }
 
-    private fun detectStations(text: String): List<Station> {
-        val found = mutableListOf<Pair<Int, Station>>()
-        for (s in Station.entries) {
-            val idx = s.keywords.map { kw ->
-                Regex("(^|[^A-Z0-9])" + Regex.escape(normalize(kw)) + "($|[^A-Z0-9])").find(text)?.range?.first ?: -1
-            }.filter { it >= 0 }.minOrNull()
-            if (idx != null) found += idx to s
-        }
-        return found.sortedBy { it.first }.map { it.second }
-    }
+    private fun cleanup(s: String): String =
+        s.replace(Regex("\\s*[-–—|+]\\s*([-–—|+]\\s*)+"), " - ")
+            .replace(Regex("\\(\\s*\\)"), "")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+            .trim('-', '–', '—', '|', '+', ':', ',', ' ')
+            .trim()
 
     fun formatDate(ms: Long): String = dateFmt.format(Date(ms))
 
-    /** Gera o texto para compartilhar no WhatsApp. */
-    fun export(vehicles: List<Vehicle>, includeReleased: Boolean = true): String {
-        val list = vehicles.filter { includeReleased || it.status != Status.LIBERADO }
+    /** Gera o texto para o WhatsApp, no formato numerado. */
+    fun export(
+        vehicles: List<Vehicle>,
+        title: String,
+        includeReleased: Boolean = true,
+        includeDate: Boolean = true,
+    ): String {
+        val list = vehicles
+            .filter { includeReleased || it.status != Status.LIBERADO }
+            .sortedWith(compareBy<Vehicle> { it.model.ordinal }.then(vinComparator))
         val sb = StringBuilder()
-        sb.append("MASSIVA FAI - No Processo\n")
-        sb.append(SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("pt", "BR")).format(Date())).append("\n")
-        for (model in CarModel.entries) {
-            val group = list.filter { it.model == model }.sortedWith(vinComparator)
-            if (group.isEmpty()) continue
-            sb.append("\n*").append(model.label.uppercase()).append(" (").append(model.code).append(") - ")
-                .append(group.size).append("*\n")
-            for (v in group) sb.append(lineFor(v)).append("\n")
-        }
-        val total = list.size
-        val released = list.count { it.status == Status.LIBERADO }
-        sb.append("\nTotal: $total | Liberados: $released | Pendentes: ${total - released}")
-        return sb.toString()
+        if (title.isNotBlank()) sb.append("*").append(title.trim()).append("*\n")
+        if (includeDate) sb.append(SimpleDateFormat("dd/MM/yyyy HH:mm", ptBR).format(Date())).append("\n")
+        if (sb.isNotEmpty()) sb.append("\n")
+        list.forEachIndexed { i, v -> sb.append(i + 1).append(" - ").append(lineFor(v)).append("\n") }
+        return sb.toString().trimEnd()
     }
 
     private fun lineFor(v: Vehicle): String {
-        val parts = mutableListOf<String>()
-        when (v.status) {
-            Status.LIBERADO -> parts += "Liberado ✅"
-            Status.TUNEL -> parts += "Túnel de liberação"
+        val sb = StringBuilder(v.vin).append(" - ").append(v.model.short)
+        val desc = when (v.status) {
+            Status.LIBERADO -> "LIBERADO ✅"
+            Status.TUNEL -> "TÚNEL DE LIBERAÇÃO"
             Status.PROCESSO -> {
                 val pend = v.pendingRepairs
-                if (pend.isEmpty() && v.repairs.isNotEmpty()) parts += "Reparos concluídos"
-                pend.forEach { r -> parts += if (r.note.isBlank()) r.station.label else "${r.station.label} - ${r.note}" }
+                if (pend.isEmpty() && v.repairs.isNotEmpty()) "REPAROS CONCLUÍDOS"
+                else pend.joinToString(" + ") { r ->
+                    r.station.label.uppercase() + if (r.note.isBlank()) "" else "(${r.note})"
+                }
             }
         }
-        if (v.notes.isNotBlank()) parts += v.notes
+        if (desc.isNotEmpty()) sb.append(" - ").append(desc)
+        if (v.notes.isNotBlank()) sb.append(" - ").append(v.notes)
         if (v.status != Status.LIBERADO) {
-            v.forecast?.let { parts += "Prev. ${formatDate(it)}" }
-            v.difficulty?.let { parts += "Nível ${it.label}" }
+            v.forecast?.let { sb.append(" ⏱ ").append(formatDate(it)) }
+            v.difficulty?.let { sb.append(" ").append(it.emoji) }
         }
-        return if (parts.isEmpty()) v.vin else v.vin + " - " + parts.joinToString(" | ")
+        return sb.toString()
     }
 }
