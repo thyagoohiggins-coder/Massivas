@@ -164,6 +164,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     notes = p.notes.ifBlank { old.notes },
                     forecast = p.forecast ?: old.forecast,
                     difficulty = p.difficulty ?: old.difficulty,
+                    color = p.color ?: old.color,
                     updatedAt = System.currentTimeMillis(),
                 )
                 updated++
@@ -172,7 +173,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 list += Vehicle(
                     id = newId(), vin = p.vin, model = model,
                     status = p.status ?: Status.PROCESSO, repairs = p.repairs, notes = p.notes,
-                    forecast = p.forecast, difficulty = p.difficulty,
+                    forecast = p.forecast, difficulty = p.difficulty, color = p.color,
                 )
                 added++
             }

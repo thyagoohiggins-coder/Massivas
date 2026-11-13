@@ -13,6 +13,7 @@ data class ParsedVehicle(
     val notes: String,
     val forecast: Long? = null,
     val difficulty: Difficulty? = null,
+    val color: CarColor? = null,
 )
 
 /**
@@ -118,6 +119,13 @@ object TextFormat {
             remove(it.range)
         }
 
+        // Cor do veículo
+        var color: CarColor? = null
+        for (c in CarColor.entries) {
+            val m = Regex("(?<![A-Z])" + normalize(c.label) + "(?![A-Z])").find(folded)
+            if (m != null && !m.range.any { removed[it] }) { color = c; remove(m.range); break }
+        }
+
         // Status
         var status: Status? = null
         Regex("(?<![A-Z])TUNEL(\\s+DE\\s+LIBERACAO)?").find(folded)?.let { status = Status.TUNEL; remove(it.range) }
@@ -155,7 +163,7 @@ object TextFormat {
             else notes = leftover
         }
 
-        val anything = repairs.isNotEmpty() || notes.isNotEmpty() || forecast != null || difficulty != null
+        val anything = repairs.isNotEmpty() || notes.isNotEmpty() || forecast != null || difficulty != null || color != null
         return ParsedVehicle(
             vin = vin,
             model = model ?: headerModel,
@@ -164,6 +172,7 @@ object TextFormat {
             notes = notes,
             forecast = forecast,
             difficulty = difficulty,
+            color = color,
         )
     }
 
@@ -177,7 +186,8 @@ object TextFormat {
 
     fun formatDate(ms: Long): String = dateFmt.format(Date(ms))
 
-    const val LEGEND = "Legenda: 🟡 Fácil | 🟠 Médio | 🔴 Difícil | ⏱ Previsão | ✅ Liberado"
+    // A probabilidade de liberação (nível) é só para uso próprio: não vai na mensagem.
+    const val LEGEND = "Legenda: ⏱ Previsão de reparos | ✅ Liberado"
 
     /** Gera o texto para o WhatsApp, no formato numerado. */
     fun export(
@@ -202,8 +212,8 @@ object TextFormat {
 
     private fun lineFor(v: Vehicle, n: Int): String {
         val sb = StringBuilder()
-        if (v.status != Status.LIBERADO) v.difficulty?.let { sb.append(it.emoji).append(" ") }
         sb.append(n).append(" - ").append(v.vin).append(" - ").append(v.model.short)
+        v.color?.let { sb.append(" - ").append(it.label.uppercase()) }
         val desc = when (v.status) {
             Status.LIBERADO -> "LIBERADO ✅"
             Status.TUNEL -> "TÚNEL DE LIBERAÇÃO"

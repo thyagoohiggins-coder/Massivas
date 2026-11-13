@@ -90,7 +90,7 @@ class NumberedFormatTest {
     fun exportRoundTrip() {
         val vs = listOf(
             Vehicle("1", "VB000433", CarModel.C928, repairs = listOf(Repair(Station.PINTURA, "cab.04"), Repair(Station.POLIMENTO)),
-                difficulty = Difficulty.DIFICIL),
+                difficulty = Difficulty.DIFICIL, color = CarColor.AZUL),
             Vehicle("2", "VB003940", CarModel.S202, status = Status.TUNEL),
         )
         val text = TextFormat.export(vs, "Turno B", includeDate = false)
@@ -98,7 +98,10 @@ class NumberedFormatTest {
         assertTrue(text.contains("1 - VB003940 - UNI-T - TÚNEL DE LIBERAÇÃO"))
         val back = TextFormat.parse(text).associateBy { it.vin }
         assertEquals(listOf(Repair(Station.PINTURA, "cab.04"), Repair(Station.POLIMENTO)), back["VB000433"]!!.repairs)
-        assertEquals(Difficulty.DIFICIL, back["VB000433"]!!.difficulty)
+        assertTrue(!text.contains("🔴"))
+        assertTrue(text.contains("VB000433 - C928 - AZUL - PINTURA (cab.04) + POLIMENTO"))
+        assertTrue(text.contains("Previsão de reparos"))
+        assertEquals(CarColor.AZUL, back["VB000433"]!!.color)
         assertEquals(CarModel.C928, back["VB000433"]!!.model)
         assertEquals(Status.TUNEL, back["VB003940"]!!.status)
     }
