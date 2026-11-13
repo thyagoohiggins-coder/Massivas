@@ -36,6 +36,14 @@ class VoiceDictation(
 
     val available: Boolean get() = SpeechRecognizer.isRecognitionAvailable(ctx)
 
+    /** Usa o reconhecimento no próprio aparelho (mais rápido, sem internet) quando disponível. */
+    var preferOffline: Boolean = false
+    private var offlineFailed = false
+
+    private val useOnDevice: Boolean
+        get() = preferOffline && !offlineFailed && Build.VERSION.SDK_INT >= 31 &&
+            SpeechRecognizer.isOnDeviceRecognitionAvailable(ctx)
+
     /** Prefixos escolhidos na tela, enviados como dica ao reconhecedor. */
     var extraBias: List<String> = emptyList()
 
@@ -108,14 +116,16 @@ class VoiceDictation(
     }
 
     private fun listen(my: Int) {
+        val onDevice = useOnDevice
         val r = try {
-            SpeechRecognizer.createSpeechRecognizer(ctx)
+            if (onDevice && Build.VERSION.SDK_INT >= 31) SpeechRecognizer.createOnDeviceSpeechRecognizer(ctx)
+            else SpeechRecognizer.createSpeechRecognizer(ctx)
         } catch (e: Exception) {
             fail("Não foi possível usar o reconhecimento de voz: ${e.message}")
             return
         }
         recognizer = r
-        r.setRecognitionListener(Listener(my))
+        r.setRecognitionListener(Listener(my, onDevice))
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "pt-BR")
@@ -123,6 +133,10 @@ class VoiceDictation(
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
             putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, ctx.packageName)
+            // fecha cada trecho mais cedo: a continuação do VIN no trecho seguinte já é tratada
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 900L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 700L)
+            if (preferOffline) putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
             if (Build.VERSION.SDK_INT >= 33) putStringArrayListExtra("android.speech.extra.BIASING_STRINGS", bias)
         }
         try {
@@ -151,7 +165,7 @@ class VoiceDictation(
         onError(msg)
     }
 
-    private inner class Listener(private val my: Int) : RecognitionListener {
+    private inner class Listener(private val my: Int, private val onDevice: Boolean) : RecognitionListener {
         private fun current() = active && my == session
 
         override fun onReadyForSpeech(params: Bundle?) {
@@ -192,7 +206,7 @@ class VoiceDictation(
             onPartial("")
             if (!best.isNullOrBlank()) onFinal(best)
             failures = 0
-            restart(150)
+            restart(30)
         }
 
         override fun onError(error: Int) {
@@ -205,7 +219,17 @@ class VoiceDictation(
                 // silêncio ou nada entendido: não é falha, só volta a ouvir
                 SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> {
                     deliverPartial()
-                    restart(150)
+                    restart(30)
+                }
+                // offline sem o idioma português: volta para o online
+                12, 13 -> if (onDevice) {
+                    offlineFailed = true
+                    deliverPartial()
+                    onError("Reconhecimento offline em português não disponível neste celular. Usando o online.")
+                    restart(30)
+                } else {
+                    deliverPartial()
+                    retryAfterFailure()
                 }
                 SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT, SpeechRecognizer.ERROR_SERVER -> {
                     deliverPartial()

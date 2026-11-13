@@ -94,7 +94,13 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
     val prefixes = listOf(prefix, prefix2).filter { it.isNotBlank() }
     var forcePrefix by remember { mutableStateOf(vm.quickForcePrefix) }
     val digitLen = remember { vm.commonDigitLength() }
-    val result = remember(text, prefix, prefix2, forcePrefix) { QuickVin.parse(text, prefixes, forcePrefix, digitLen) }
+    var offline by remember { mutableStateOf(vm.quickOffline) }
+    // Texto ao vivo: o que está sendo falado já aparece no campo e na conferência, antes do fim da frase.
+    val live = remember(text, partial, prefix, prefix2, forcePrefix) {
+        if (partial.isBlank()) text
+        else QuickVin.tidy(text.trimEnd() + " " + QuickVin.convertSpeech(partial), listOf(prefix, prefix2), forcePrefix, digitLen)
+    }
+    val result = remember(live, prefix, prefix2, forcePrefix) { QuickVin.parse(live, prefixes, forcePrefix, digitLen) }
     val entries = result.entries
     fun modelOf(e: QuickVin.Entry) = e.model ?: vm.findByVin(e.vin)?.model ?: defaultModel
     val missingModel = entries.count { modelOf(it) == null }
@@ -117,6 +123,7 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
     }
     DisposableEffect(Unit) { onDispose { dictation.destroy() } }
     dictation.extraBias = prefixes
+    dictation.preferOffline = offline
 
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
         if (ok) dictation.start() else Toast.makeText(ctx, "Sem permissão do microfone", Toast.LENGTH_SHORT).show()
@@ -237,8 +244,9 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
             }
 
             OutlinedTextField(
-                value = text,
-                onValueChange = { text = it },
+                value = if (listening) live else text,
+                onValueChange = { if (!listening) text = it },
+                readOnly = listening,
                 label = { Text("VINs") },
                 placeholder = { Text("VB001778 CS55, VB000433 C928, …") },
                 textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace),
@@ -300,6 +308,10 @@ fun QuickAddScreen(vm: MainViewModel, onClose: () -> Unit) {
                         "Sempre usar ${if (prefixes.size > 1) "um destes prefixos" else "o prefixo $prefix"} (corrige \"BB\", \"VV\", \"bebê\"…)",
                         forcePrefix,
                     ) { forcePrefix = it; vm.quickForcePrefix = it }
+                    OptionRow(
+                        "Reconhecimento offline (mais rápido; precisa do pacote de voz em português no celular)",
+                        offline,
+                    ) { offline = it; vm.quickOffline = it }
                 }
             }
 
