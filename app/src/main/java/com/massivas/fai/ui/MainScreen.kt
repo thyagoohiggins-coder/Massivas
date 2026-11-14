@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -47,6 +49,8 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -75,6 +79,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -136,6 +143,7 @@ private fun ListScreen(
     var aboutOpen by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf<String?>(null) }
     var menuOpen by remember { mutableStateOf(false) }
+    var showNotes by remember { mutableStateOf(vm.showNotes) }
     var stationMenu by remember { mutableStateOf(false) }
 
     var searching by rememberSaveable { mutableStateOf(false) }
@@ -236,6 +244,10 @@ private fun ListScreen(
                                 DropdownMenuItem(text = { Text("Verificar atualizações") }, onClick = {
                                     menuOpen = false; vm.checkForUpdate()
                                 })
+                                DropdownMenuItem(
+                                    text = { Text(if (showNotes) "Lista compacta (esconder descrições)" else "Mostrar descrições dos reparos") },
+                                    onClick = { menuOpen = false; showNotes = !showNotes; vm.showNotes = showNotes },
+                                )
                                 DropdownMenuItem(text = { Text("Sobre") }, onClick = {
                                     menuOpen = false; aboutOpen = true
                                 })
@@ -251,20 +263,25 @@ private fun ListScreen(
                 ) {
                     val tabs = listOf(
                         "Todos" to vehicles.size,
-                        "Processo" to vehicles.count { it.status == Status.PROCESSO },
+                        "Proc." to vehicles.count { it.status == Status.PROCESSO },
                         "Túnel" to vehicles.count { it.status == Status.TUNEL },
                         "Bolsão" to vehicles.count { it.status == Status.BOLSAO },
-                        "Liberados" to vehicles.count { it.status == Status.LIBERADO },
+                        "Lib." to vehicles.count { it.status == Status.LIBERADO },
                     )
                     tabs.forEachIndexed { i, (label, count) ->
                         Tab(
                             selected = statusTab == i,
                             onClick = { statusTab = i },
+                            modifier = Modifier.height(36.dp),
                             text = {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text("$count", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                                    Text(label, fontSize = 11.sp, maxLines = 1)
-                                }
+                                Text(
+                                    buildAnnotatedString {
+                                        withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append("$count ") }
+                                        append(label)
+                                    },
+                                    fontSize = 12.sp,
+                                    maxLines = 1,
+                                )
                             },
                         )
                     }
@@ -272,32 +289,28 @@ private fun ListScreen(
             }
         },
         floatingActionButton = {
-            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                ExtendedFloatingActionButton(
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                SmallFloatingActionButton(
                     onClick = onQuickAdd,
-                    icon = { Text("🎤", fontSize = 18.sp) },
-                    text = { Text("Vários VINs") },
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
-                ExtendedFloatingActionButton(
+                ) { Text("🎤", fontSize = 18.sp) }
+                FloatingActionButton(
                     onClick = onAdd,
-                    icon = { Icon(Icons.Filled.Add, null) },
-                    text = { Text("Adicionar VIN", fontWeight = FontWeight.Bold) },
                     containerColor = MaterialTheme.colorScheme.secondary,
                     contentColor = MaterialTheme.colorScheme.onSecondary,
-                )
+                ) { Icon(Icons.Filled.Add, "Adicionar VIN") }
             }
         },
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(bottom = 170.dp),
+            contentPadding = PaddingValues(bottom = 130.dp),
         ) {
             // Filtro por modelo + estação
             item {
                 Row(
-                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp),
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 2.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -377,8 +390,8 @@ private fun ListScreen(
             groups.forEach { (model, list) ->
                 stickyHeader(key = "h_${model.name}") {
                     Surface(color = MaterialTheme.colorScheme.surfaceContainerHighest, modifier = Modifier.fillMaxWidth()) {
-                        Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(model.label, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Row(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(model.label, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                             if (model.code.isNotEmpty()) Text("  ${model.code}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Spacer(Modifier.weight(1f))
                             Pill(text = "${list.size}", color = MaterialTheme.colorScheme.primary, textColor = MaterialTheme.colorScheme.onPrimary)
@@ -388,6 +401,7 @@ private fun ListScreen(
                 items(list, key = { it.id }) { v ->
                     VehicleCard(
                         v = v,
+                        showNotes = showNotes,
                         onClick = { onEdit(v) },
                         onStatus = { vm.setStatus(v.id, it) },
                         onToggleRepair = { vm.toggleRepair(v.id, it) },
@@ -492,10 +506,11 @@ private fun EmptyState(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
 private fun VehicleCard(
     v: Vehicle,
+    showNotes: Boolean,
     onClick: () -> Unit,
     onStatus: (Status) -> Unit,
     onToggleRepair: (Station) -> Unit,
@@ -507,116 +522,118 @@ private fun VehicleCard(
     val overdue = !released && v.forecast != null && v.forecast < System.currentTimeMillis()
     val green = Status.LIBERADO.color
 
-    Box(Modifier.padding(horizontal = 12.dp, vertical = 5.dp)) {
+    Box(Modifier.padding(horizontal = 8.dp, vertical = 2.dp)) {
         Card(
             modifier = Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = { menu = true }),
-            shape = RoundedCornerShape(14.dp),
+            shape = RoundedCornerShape(10.dp),
             colors = CardDefaults.cardColors(
                 containerColor = if (released) MaterialTheme.colorScheme.surfaceContainer else MaterialTheme.colorScheme.surfaceContainerLow,
             ),
-            elevation = CardDefaults.cardElevation(defaultElevation = if (released) 0.dp else 2.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = if (released) 0.dp else 1.dp),
         ) {
             Row(Modifier.height(IntrinsicSize.Min)) {
                 // faixa lateral: probabilidade de liberação (ou verde se liberado)
                 Box(
-                    Modifier.width(6.dp).fillMaxHeight()
+                    Modifier.width(5.dp).fillMaxHeight()
                         .background(if (released) green else v.difficulty?.color ?: Color.Transparent)
                 )
-                Column(Modifier.padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 10.dp).weight(1f)) {
-                    // Linha 1: VIN + cor + status
+                Column(Modifier.padding(start = 10.dp, end = 6.dp, top = 6.dp, bottom = 6.dp).weight(1f)) {
+                    // Linha 1: VIN, cor, status e ações rápidas
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             v.vin,
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 19.sp,
+                            fontSize = 16.sp,
                             textDecoration = if (released) TextDecoration.LineThrough else null,
                         )
                         v.color?.let {
-                            Spacer(Modifier.width(8.dp))
-                            ColorDot(it, 14)
+                            Spacer(Modifier.width(6.dp))
+                            ColorDot(it, 12)
+                        }
+                        if (!released && v.forecast != null) {
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                (if (overdue) "⚠" else "⏱") + TextFormat.formatDate(v.forecast),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (overdue) Color(0xFFE53935) else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                         Spacer(Modifier.weight(1f))
                         when (v.status) {
                             Status.TUNEL -> Pill(text = "TÚNEL", color = Status.TUNEL.color)
-                            Status.BOLSAO -> Unit // o bolsão aparece logo abaixo do VIN
-                            Status.LIBERADO -> Pill(text = "LIBERADO ✓", color = green)
-                            Status.PROCESSO -> v.difficulty?.let { Pill(text = it.label, color = it.color, textColor = it.onColor) }
+                            Status.LIBERADO -> Pill(text = "LIBERADO", color = green)
+                            Status.BOLSAO -> Pill(text = "🅿 " + (v.bolsao?.label?.removePrefix("Bolsão ")?.removePrefix("do ") ?: "Bolsão"), color = Bolsao.color)
+                            Status.PROCESSO -> Unit
+                        }
+                        Spacer(Modifier.width(4.dp))
+                        when (v.status) {
+                            Status.PROCESSO -> {
+                                MiniButton("Túnel", Status.TUNEL.color, filled = false) { onStatus(Status.TUNEL) }
+                                MiniButton("✓", green, filled = true) { onStatus(Status.LIBERADO) }
+                            }
+                            Status.TUNEL, Status.BOLSAO -> {
+                                MiniButton("✓", green, filled = true) { onStatus(Status.LIBERADO) }
+                            }
+                            Status.LIBERADO -> MiniButton("↶", Status.PROCESSO.color, filled = false) { onStatus(Status.PROCESSO) }
                         }
                     }
 
-                    v.bolsao?.let {
-                        Spacer(Modifier.height(6.dp))
-                        Pill(text = "🅿 ${it.label}", color = Bolsao.color)
-                    }
-
-                    // Reparos: toque para marcar como feito
-                    if (v.repairs.isNotEmpty()) {
-                        Spacer(Modifier.height(6.dp))
-                        v.repairs.forEach { r ->
+                    // Linha 2: estações (toque para marcar o reparo como feito)
+                    if (v.repairs.isNotEmpty() || (!showNotes && v.notes.isNotBlank())) {
+                        if (showNotes) {
+                            v.repairs.forEach { r ->
+                                Row(
+                                    Modifier.fillMaxWidth().clickable { onToggleRepair(r.station) }.padding(top = 3.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Pill(text = (if (r.done) "✓ " else "") + r.station.label, color = r.station.color, strike = r.done)
+                                    if (r.note.isNotBlank()) {
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(
+                                            r.note,
+                                            fontSize = 13.sp,
+                                            color = if (r.done) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                                            textDecoration = if (r.done) TextDecoration.LineThrough else null,
+                                        )
+                                    }
+                                }
+                            }
+                        } else {
                             Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .clickable { onToggleRepair(r.station) }
-                                    .heightIn(min = 32.dp)
-                                    .padding(vertical = 2.dp),
+                                Modifier.padding(top = 3.dp).horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Pill(
-                                    text = (if (r.done) "✓ " else "") + r.station.label,
-                                    color = r.station.color,
-                                    strike = r.done,
-                                )
-                                if (r.note.isNotBlank()) {
-                                    Spacer(Modifier.width(8.dp))
+                                v.repairs.forEach { r ->
+                                    Pill(
+                                        text = (if (r.done) "✓ " else "") + r.station.label,
+                                        color = r.station.color,
+                                        strike = r.done,
+                                        modifier = Modifier.clickable { onToggleRepair(r.station) },
+                                    )
+                                }
+                                // resumo da primeira descrição, em uma linha
+                                val firstNote = v.repairs.firstOrNull { it.note.isNotBlank() && !it.done }?.note ?: v.notes
+                                if (firstNote.isNotBlank()) {
                                     Text(
-                                        r.note,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = if (r.done) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
-                                        textDecoration = if (r.done) TextDecoration.LineThrough else null,
+                                        firstNote,
+                                        fontSize = 12.sp,
+                                        maxLines = 1,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
                             }
                         }
                     }
-                    if (v.notes.isNotBlank()) {
+                    if (showNotes && v.notes.isNotBlank()) {
                         Text(
                             v.notes,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 4.dp),
-                        )
-                    }
-                    if (!released && v.forecast != null) {
-                        Text(
-                            (if (overdue) "⚠ Previsão vencida: " else "⏱ Previsão: ") + TextFormat.formatDate(v.forecast),
                             fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = if (overdue) Color(0xFFE53935) else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 4.dp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 3.dp),
                         )
-                    }
-
-                    // Ações rápidas
-                    Spacer(Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        when (v.status) {
-                            Status.PROCESSO -> {
-                                QuickButton("→ Túnel", Status.TUNEL.color, filled = false) { onStatus(Status.TUNEL) }
-                                QuickButton("✓ Liberar", green, filled = true) { onStatus(Status.LIBERADO) }
-                            }
-                            Status.TUNEL -> {
-                                QuickButton("← Processo", Status.PROCESSO.color, filled = false) { onStatus(Status.PROCESSO) }
-                                QuickButton("✓ Liberar", green, filled = true) { onStatus(Status.LIBERADO) }
-                            }
-                            Status.BOLSAO -> {
-                                QuickButton("→ Produção", Status.PROCESSO.color, filled = false) { onStatus(Status.PROCESSO) }
-                                QuickButton("✓ Liberar", green, filled = true) { onStatus(Status.LIBERADO) }
-                            }
-                            Status.LIBERADO -> {
-                                QuickButton("Desfazer liberação", Status.PROCESSO.color, filled = false) { onStatus(Status.PROCESSO) }
-                            }
-                        }
                     }
                 }
             }
@@ -637,6 +654,29 @@ private fun VehicleCard(
             confirmButton = { TextButton(onClick = { confirmDelete = false; onDelete() }) { Text("Excluir") } },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancelar") } },
         )
+    }
+}
+
+/** Botão pequeno para as ações rápidas do cartão. */
+@Composable
+private fun MiniButton(text: String, color: Color, filled: Boolean, onClick: () -> Unit) {
+    val pad = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
+    Box(Modifier.padding(start = 4.dp)) {
+        if (filled) {
+            Button(
+                onClick = onClick,
+                colors = ButtonDefaults.buttonColors(containerColor = color, contentColor = Color.White),
+                contentPadding = pad,
+                modifier = Modifier.height(30.dp).defaultMinSize(minWidth = 40.dp),
+            ) { Text(text, fontSize = 13.sp, fontWeight = FontWeight.Bold) }
+        } else {
+            OutlinedButton(
+                onClick = onClick,
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = color),
+                contentPadding = pad,
+                modifier = Modifier.height(30.dp).defaultMinSize(minWidth = 40.dp),
+            ) { Text(text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold) }
+        }
     }
 }
 

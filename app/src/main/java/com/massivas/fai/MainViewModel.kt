@@ -119,6 +119,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     var quickPrefix2: String
         get() = prefs.getString("quickPrefix2", null) ?: ""
         set(v) { prefs.edit().putString("quickPrefix2", v).apply() }
+    /** Lista detalhada (com descrições) ou compacta. */
+    var showNotes: Boolean
+        get() = prefs.getBoolean("showNotes", false)
+        set(v) { prefs.edit().putBoolean("showNotes", v).apply() }
     var quickOffline: Boolean
         get() = prefs.getBoolean("quickOffline", false)
         set(v) { prefs.edit().putBoolean("quickOffline", v).apply() }
