@@ -178,6 +178,13 @@ fun VehicleEditor(initial: Vehicle?, vm: MainViewModel, onClose: () -> Unit) {
                     }
                 },
                 actions = {
+                    current?.let { cur ->
+                        TextButton(onClick = {
+                            vm.markUpdated(cur.id)
+                            Toast.makeText(ctx, "${cur.vin} atualizado", Toast.LENGTH_SHORT).show()
+                            onClose()
+                        }) { Text("🔄 Atualizar", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold) }
+                    }
                     if (current != null) {
                         IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Filled.Delete, "Excluir") }
                     }

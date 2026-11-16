@@ -333,3 +333,11 @@ class RepeatedDigitsTest {
         assertTrue(QuickVin.score("VB 0 0 1 7 7 8") > QuickVin.score("VB 0 1 7 8"))
     }
 }
+
+class CheckedAtTest {
+    @Test
+    fun savesCheckedAt() {
+        val v = Vehicle("1", "VB000001", CarModel.C655, checkedAt = 1_700_000_000_000L)
+        assertEquals(1_700_000_000_000L, Vehicle.fromJson(v.toJson())!!.checkedAt)
+    }
+}

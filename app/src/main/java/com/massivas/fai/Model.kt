@@ -103,6 +103,8 @@ data class Vehicle(
     val difficulty: Difficulty? = null,
     val notes: String = "",
     val bolsao: Bolsao? = null,
+    /** Última vez que alguém conferiu o carro ("Atualizar"), mudou o status ou editou. */
+    val checkedAt: Long? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
 ) {
@@ -123,6 +125,7 @@ data class Vehicle(
         difficulty?.let { put("difficulty", it.name) }
         put("notes", notes)
         bolsao?.let { put("bolsao", it.name) }
+        checkedAt?.let { put("checkedAt", it) }
         put("createdAt", createdAt)
         put("updatedAt", updatedAt)
     }
@@ -151,6 +154,7 @@ data class Vehicle(
                 difficulty = enumOrNull<Difficulty>(o.optString("difficulty")),
                 notes = o.optString("notes"),
                 bolsao = enumOrNull<Bolsao>(o.optString("bolsao")),
+                checkedAt = if (o.has("checkedAt")) o.getLong("checkedAt") else null,
                 createdAt = o.optLong("createdAt", System.currentTimeMillis()),
                 updatedAt = o.optLong("updatedAt", System.currentTimeMillis()),
             )

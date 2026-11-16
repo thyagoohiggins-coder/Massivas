@@ -406,6 +406,10 @@ private fun ListScreen(
                         onStatus = { vm.setStatus(v.id, it) },
                         onToggleRepair = { vm.toggleRepair(v.id, it) },
                         onDelete = { vm.delete(v.id) },
+                        onUpdated = {
+                            vm.markUpdated(v.id)
+                            Toast.makeText(ctx, "${v.vin} atualizado", Toast.LENGTH_SHORT).show()
+                        },
                     )
                 }
             }
@@ -453,6 +457,7 @@ private fun ListScreen(
                         "• Toque no VIN para editar.\n" +
                         "• Use os botões do cartão para mandar ao Túnel ou Liberar.\n" +
                         "• Toque numa estação do cartão para marcar o reparo como feito.\n" +
+                        "• Segure o cartão (ou abra o VIN) e toque em 🔄 Atualizar quando conferir o carro e o status continuar o mesmo.\n" +
                         "• Segure o cartão para mais opções."
                 )
             },
@@ -515,6 +520,7 @@ private fun VehicleCard(
     onStatus: (Status) -> Unit,
     onToggleRepair: (Station) -> Unit,
     onDelete: () -> Unit,
+    onUpdated: () -> Unit,
 ) {
     var menu by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
@@ -561,6 +567,14 @@ private fun VehicleCard(
                             )
                         }
                         Spacer(Modifier.weight(1f))
+                        v.checkedAt?.let {
+                            Text(
+                                "🔄 " + updatedLabel(it),
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(end = 4.dp),
+                            )
+                        }
                         when (v.status) {
                             Status.TUNEL -> Pill(text = "TÚNEL", color = Status.TUNEL.color)
                             Status.LIBERADO -> Pill(text = "LIBERADO", color = green)
@@ -639,6 +653,10 @@ private fun VehicleCard(
             }
         }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            DropdownMenuItem(
+                text = { Text("🔄 Atualizar (status continua o mesmo)", fontWeight = FontWeight.Bold) },
+                onClick = { menu = false; onUpdated() },
+            )
             DropdownMenuItem(text = { Text("Editar") }, onClick = { menu = false; onClick() })
             Status.entries.filter { it != v.status && it != Status.BOLSAO }.forEach { s ->
                 DropdownMenuItem(text = { Text("Marcar: ${s.label}") }, onClick = { menu = false; onStatus(s) })
@@ -655,6 +673,13 @@ private fun VehicleCard(
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancelar") } },
         )
     }
+}
+
+/** "14:32" se for hoje, senão "15/11 14:32". */
+private fun updatedLabel(ms: Long): String {
+    val today = java.text.SimpleDateFormat("dd/MM", java.util.Locale.getDefault()).format(java.util.Date())
+    val full = TextFormat.formatDate(ms)
+    return if (full.startsWith(today)) full.substringAfter(' ') else full
 }
 
 /** Botão pequeno para as ações rápidas do cartão. */

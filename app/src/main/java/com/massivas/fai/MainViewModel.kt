@@ -91,7 +91,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun save(vehicle: Vehicle) {
-        val v = vehicle.copy(vin = cleanVin(vehicle.vin), updatedAt = System.currentTimeMillis())
+        val now = System.currentTimeMillis()
+        val v = vehicle.copy(vin = cleanVin(vehicle.vin), updatedAt = now, checkedAt = now)
         val list = _vehicles.value.toMutableList()
         val sameVin = list.indexOfFirst { it.vin == v.vin && it.id != v.id }
         if (sameVin >= 0) list.removeAt(sameVin)
@@ -139,7 +140,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setStatus(id: String, status: Status) = persist(_vehicles.value.map {
         // sair do status Bolsão tira o carro do bolsão
-        if (it.id == id) it.copy(status = status, bolsao = if (status == Status.BOLSAO) it.bolsao else null, updatedAt = System.currentTimeMillis()) else it
+        if (it.id == id) {
+            val now = System.currentTimeMillis()
+            it.copy(status = status, bolsao = if (status == Status.BOLSAO) it.bolsao else null, updatedAt = now, checkedAt = now)
+        } else it
+    })
+
+    /** "Atualizar": conferi o carro e o status continua o mesmo — só registra o horário. */
+    fun markUpdated(id: String) = persist(_vehicles.value.map {
+        if (it.id == id) it.copy(checkedAt = System.currentTimeMillis()) else it
     })
 
     fun toggleRepair(id: String, station: Station) = persist(_vehicles.value.map { v ->
@@ -157,7 +166,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         set(v) { prefs.edit().putBoolean("shareDate", v).apply() }
 
     fun markReleased(vins: Set<String>) = persist(_vehicles.value.map {
-        if (it.vin in vins) it.copy(status = Status.LIBERADO, bolsao = null, updatedAt = System.currentTimeMillis()) else it
+        if (it.vin in vins) {
+            val now = System.currentTimeMillis()
+            it.copy(status = Status.LIBERADO, bolsao = null, updatedAt = now, checkedAt = now)
+        } else it
     })
 
     fun clearReleased() = persist(_vehicles.value.filterNot { it.status == Status.LIBERADO })
