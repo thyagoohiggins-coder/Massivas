@@ -54,6 +54,7 @@ enum class Station(val label: String, val color: Color, val keywords: List<Strin
     EX_OK("EX-OK", Color(0xFF2E7D32), listOf("EX OK", "EX-OK", "EXOK", "EX.OK", "EX - OK")),
     SHOWER("Reparo de Shower", Color(0xFF00ACC1), listOf("REPARO DE SHOWER", "SHOWER")),
     PISTA("Reparo de Pista", Color(0xFF6D4C41), listOf("REPARO DE PISTA", "PISTA")),
+    TESTE_PISTA("Teste de Pista", Color(0xFFBF360C), listOf("TESTE DE PISTA", "TESTE PISTA")),
     FUNILARIA("Funilaria", Color(0xFF607D8B), listOf("FUNILARIA", "FUNIL")),
     ELETRICA("Elétrica", Color(0xFF3949AB), listOf("ELETRICA", "ELETRICO")),
     ALINHAMENTO("Alinhamento", Color(0xFF00897B), listOf("ALINHAMENTO", "ALINH")),

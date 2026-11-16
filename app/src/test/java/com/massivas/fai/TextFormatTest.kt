@@ -359,3 +359,14 @@ class PastedColorTest {
         assertEquals(CarColor.CINZA, p["VB000444"]!!.color)
     }
 }
+
+class TesteDePistaTest {
+    @Test
+    fun pastedAndSpoken() {
+        val p = TextFormat.parse("1 - VB000111 - CS55 - TESTE DE PISTA (barulho)\n2 - VB000222 - C928 - PISTA").associateBy { it.vin }
+        assertEquals(Repair(Station.TESTE_PISTA, "barulho"), p["VB000111"]!!.repairs.single())
+        assertEquals(Station.PISTA, p["VB000222"]!!.repairs.single().station)
+        val r = QuickVin.parse(QuickVin.convertSpeech("VB zero zero zero um um um teste de pista"), "VB", true)
+        assertEquals(listOf(Station.TESTE_PISTA), r.entries.single().stations)
+    }
+}
