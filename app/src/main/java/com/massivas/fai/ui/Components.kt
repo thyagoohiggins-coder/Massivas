@@ -3,6 +3,7 @@ package com.massivas.fai.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -25,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -136,4 +139,50 @@ fun SectionTitle(text: String, modifier: Modifier = Modifier) {
         letterSpacing = 1.sp,
         color = MaterialTheme.colorScheme.primary,
     )
+}
+
+/** Seletor de cor do veículo: bolinhas grandes, a escolhida com anel e ✓. Tocar de novo desmarca. */
+@Composable
+fun CarColorPicker(selected: CarColor?, onSelect: (CarColor?) -> Unit) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+        CarColor.entries.forEach { c ->
+            val isSel = selected == c
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable { onSelect(if (isSel) null else c) }
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            ) {
+                Box(
+                    Modifier
+                        .size(44.dp)
+                        .border(
+                            if (isSel) 3.dp else 1.dp,
+                            if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                            CircleShape,
+                        )
+                        .padding(if (isSel) 5.dp else 2.dp)
+                        .background(c.swatch, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (isSel) {
+                        Text(
+                            "✓",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp,
+                            color = if (c == CarColor.BRANCO || c == CarColor.CINZA) Color.Black else Color.White,
+                        )
+                    }
+                }
+                Text(
+                    c.label,
+                    fontSize = 13.sp,
+                    fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
+                    color = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+        }
+    }
 }

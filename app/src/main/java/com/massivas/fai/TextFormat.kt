@@ -128,10 +128,20 @@ object TextFormat {
         }
 
         // Cor do veículo
+        // Só vale quando a cor está sozinha no seu trecho da linha ("- AZUL -" ou "CS55 AZUL"),
+        // para não pegar palavras da descrição do reparo ("risco no para-choque preto").
         var color: CarColor? = null
-        for (c in CarColor.entries) {
-            val m = Regex("(?<![A-Z])" + normalize(c.label) + "(?![A-Z])").find(folded)
-            if (m != null && !m.range.any { removed[it] }) { color = c; remove(m.range); break }
+        val seps = setOf('-', '–', '—', '|')
+        colorLoop@ for ((word, c) in colorWords) {
+            for (m in Regex("(?<![A-Z])$word(?![A-Z])").findAll(folded)) {
+                if (m.range.any { removed[it] }) continue
+                var a = m.range.first - 1
+                while (a >= 0 && text[a] !in seps) a--
+                var b = m.range.last + 1
+                while (b < text.length && text[b] !in seps) b++
+                val alone = ((a + 1) until b).all { i -> i in m.range || removed[i] || !text[i].isLetterOrDigit() }
+                if (alone) { color = c; remove(m.range); break@colorLoop }
+            }
         }
 
         // Status
@@ -193,6 +203,13 @@ object TextFormat {
             .trim()
             .trim('-', '–', '—', '|', '+', ':', ',', ' ')
             .trim()
+
+    private val colorWords = listOf(
+        "AZUL" to CarColor.AZUL,
+        "CINZA" to CarColor.CINZA, "CINZENTO" to CarColor.CINZA, "CINZENTA" to CarColor.CINZA, "PRATA" to CarColor.CINZA,
+        "PRETO" to CarColor.PRETO, "PRETA" to CarColor.PRETO,
+        "BRANCO" to CarColor.BRANCO, "BRANCA" to CarColor.BRANCO,
+    )
 
     fun formatDate(ms: Long): String = dateFmt.format(Date(ms))
 

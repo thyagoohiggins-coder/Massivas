@@ -341,3 +341,21 @@ class CheckedAtTest {
         assertEquals(1_700_000_000_000L, Vehicle.fromJson(v.toJson())!!.checkedAt)
     }
 }
+
+class PastedColorTest {
+    @Test
+    fun colorOnlyWhenAlone() {
+        val p = TextFormat.parse("""
+            1 - VB000111 - CS55 AZUL - PINTURA (risco preto)
+            2 - VB000222 - C928 - Ex Ok - Falta moldura preta
+            3 - VB000333 - T18 - BRANCA - POLIMENTO
+            4 - VB000444 - UNI-T - PRATA
+        """.trimIndent()).associateBy { it.vin }
+        assertEquals(CarColor.AZUL, p["VB000111"]!!.color)
+        assertEquals(Repair(Station.PINTURA, "risco preto"), p["VB000111"]!!.repairs.single())
+        assertEquals(null, p["VB000222"]!!.color)
+        assertEquals("Falta moldura preta", p["VB000222"]!!.repairs.single().note)
+        assertEquals(CarColor.BRANCO, p["VB000333"]!!.color)
+        assertEquals(CarColor.CINZA, p["VB000444"]!!.color)
+    }
+}

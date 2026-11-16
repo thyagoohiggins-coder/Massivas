@@ -100,7 +100,7 @@ fun VehicleEditor(initial: Vehicle?, vm: MainViewModel, onClose: () -> Unit) {
     var notes by remember { mutableStateOf(initial?.notes ?: "") }
     var bolsao by remember { mutableStateOf(initial?.bolsao) }
     var moreOpen by remember {
-        mutableStateOf(initial != null && (initial.color != null || initial.forecast != null || initial.difficulty != null || initial.notes.isNotBlank()))
+        mutableStateOf(initial != null && (initial.forecast != null || initial.difficulty != null || initial.notes.isNotBlank()))
     }
     var confirmDelete by remember { mutableStateOf(false) }
     var savedCount by remember { mutableStateOf(0) }
@@ -256,6 +256,12 @@ fun VehicleEditor(initial: Vehicle?, vm: MainViewModel, onClose: () -> Unit) {
                 }
             }
 
+            // Cor (opcional)
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                SectionTitle("Cor (opcional)")
+                CarColorPicker(selected = color, onSelect = { color = it })
+            }
+
             // Estações
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SectionTitle(if (status == Status.BOLSAO) "Estações de reparo (opcional)" else "Estações de reparo")
@@ -335,7 +341,7 @@ fun VehicleEditor(initial: Vehicle?, vm: MainViewModel, onClose: () -> Unit) {
                     Column(Modifier.weight(1f)) {
                         Text("Mais detalhes (opcional)", fontWeight = FontWeight.SemiBold)
                         Text(
-                            "Cor, previsão, probabilidade de liberação e observações",
+                            "Previsão, probabilidade de liberação e observações",
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -346,21 +352,6 @@ fun VehicleEditor(initial: Vehicle?, vm: MainViewModel, onClose: () -> Unit) {
 
             AnimatedVisibility(visible = moreOpen) {
                 Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SectionTitle("Cor")
-                        Grid(CarColor.entries.toList(), columns = 4, spacing = 6.dp) { c, mod ->
-                            SelectTile(
-                                selected = color == c,
-                                onClick = { color = if (color == c) null else c },
-                                modifier = mod,
-                            ) { tc ->
-                                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                                    ColorDot(c, 18)
-                                    Text(c.label, fontSize = 12.sp, color = tc)
-                                }
-                            }
-                        }
-                    }
 
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         SectionTitle("Probabilidade de liberação")
