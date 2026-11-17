@@ -224,7 +224,7 @@ class BolsaoTest {
     fun exportsBolsao() {
         val text = TextFormat.export(listOf(Vehicle("1", "VB000111", CarModel.C655, status = Status.BOLSAO, bolsao = Bolsao.HELIPONTO)), "X", includeDate = false)
         assertTrue(text.contains("1 - VB000111 - CS55 - BOLSÃO HELIPONTO"))
-        assertTrue(text.contains("Bolsão: 1"))
+        assertTrue(!text.contains("Bolsão: "))
         assertEquals(Bolsao.HELIPONTO, TextFormat.parse(text).single().bolsao)
     }
 }
