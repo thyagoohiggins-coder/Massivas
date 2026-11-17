@@ -392,3 +392,11 @@ class PrettyExportTest {
         assertEquals(CarColor.CINZA, back["VB000685"]!!.color)
     }
 }
+
+class StationInsideNoteTest {
+    @Test
+    fun noteMentionsOtherStation() {
+        val p = TextFormat.parse("1 - VB000111 - CS55 - *EX-OK*: falta pintura no friso").single()
+        assertEquals(listOf(Repair(Station.EX_OK, "falta pintura no friso")), p.repairs)
+    }
+}

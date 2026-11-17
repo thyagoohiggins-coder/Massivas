@@ -165,6 +165,8 @@ object TextFormat {
         stationHits.sortBy { it.second.first }
         val repairs = mutableListOf<Repair>()
         for ((s, r) in stationHits) {
+            // palavra de estação dentro da descrição de outra estação não vira estação
+            if (r.any { removed[it] }) continue
             remove(r)
             var note = ""
             val after = text.substring(r.last + 1)
