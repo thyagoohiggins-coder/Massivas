@@ -99,7 +99,7 @@ class NumberedFormatTest {
         val back = TextFormat.parse(text).associateBy { it.vin }
         assertEquals(listOf(Repair(Station.PINTURA, "cab.04"), Repair(Station.POLIMENTO)), back["VB000433"]!!.repairs)
         assertTrue(!text.contains("🔴"))
-        assertTrue(text.contains("VB000433 - C928 - AZUL - PINTURA (cab.04) + POLIMENTO"))
+        assertTrue(text.contains("VB000433 - C928 - AZUL - *PINTURA*: cab.04 · *POLIMENTO*"))
         assertTrue(text.contains("Previsão de reparos"))
         assertEquals(CarColor.AZUL, back["VB000433"]!!.color)
         assertEquals(CarModel.C928, back["VB000433"]!!.model)
@@ -368,5 +368,27 @@ class TesteDePistaTest {
         assertEquals(Station.PISTA, p["VB000222"]!!.repairs.single().station)
         val r = QuickVin.parse(QuickVin.convertSpeech("VB zero zero zero um um um teste de pista"), "VB", true)
         assertEquals(listOf(Station.TESTE_PISTA), r.entries.single().stations)
+    }
+}
+
+class PrettyExportTest {
+    @Test
+    fun noNestedParentheses() {
+        val vs = listOf(
+            Vehicle("1", "VB001433", CarModel.C655, color = CarColor.AZUL,
+                repairs = listOf(Repair(Station.EX_OK, "Falta Acab. do retrovisor central (1 demerito apenas)"))),
+            Vehicle("2", "VB000685", CarModel.C928, color = CarColor.CINZA,
+                repairs = listOf(Repair(Station.EX_OK, "Aguardando peça PCH FR (Small)"), Repair(Station.PINTURA, "Abaixar camada"))),
+        )
+        val text = TextFormat.export(vs, "MASSIVA FAI", includeDate = false)
+        assertTrue(text.contains("VB001433 - CS55 - AZUL - *EX-OK*: Falta Acab. do retrovisor central (1 demerito apenas)"))
+        assertTrue(text.contains("VB000685 - C928 - CINZA - *EX-OK*: Aguardando peça PCH FR (Small) · *PINTURA*: Abaixar camada"))
+        val back = TextFormat.parse(text).associateBy { it.vin }
+        assertEquals(Repair(Station.EX_OK, "Falta Acab. do retrovisor central (1 demerito apenas)"), back["VB001433"]!!.repairs.single())
+        assertEquals(
+            listOf(Repair(Station.EX_OK, "Aguardando peça PCH FR (Small)"), Repair(Station.PINTURA, "Abaixar camada")),
+            back["VB000685"]!!.repairs,
+        )
+        assertEquals(CarColor.CINZA, back["VB000685"]!!.color)
     }
 }

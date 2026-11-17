@@ -167,8 +167,14 @@ object TextFormat {
         for ((s, r) in stationHits) {
             remove(r)
             var note = ""
-            val paren = Regex("^\\s*\\(([^)]*)\\)").find(text.substring(r.last + 1))
-            if (paren != null) {
+            val after = text.substring(r.last + 1)
+            // formato novo: "*PINTURA*: descrição" (até o próximo " · " ou " | ")
+            val colon = Regex("^\\*?\\s*:\\s*([^·|]*)").find(after)
+            val paren = Regex("^\\s*\\(([^)]*)\\)").find(after)
+            if (colon != null) {
+                note = colon.groupValues[1].trim()
+                remove((r.last + 1)..(r.last + colon.range.last + 1))
+            } else if (paren != null) {
                 note = paren.groupValues[1].trim()
                 remove((r.last + 1)..(r.last + paren.range.last + 1))
             }
@@ -197,7 +203,8 @@ object TextFormat {
     }
 
     private fun cleanup(s: String): String =
-        s.replace(Regex("\\s*[-–—|+]\\s*([-–—|+]\\s*)+"), " - ")
+        s.replace("*", " ").replace("·", " ")
+            .replace(Regex("\\s*[-–—|+]\\s*([-–—|+]\\s*)+"), " - ")
             .replace(Regex("\\(\\s*\\)"), "")
             .replace(Regex("\\s+"), " ")
             .trim()
@@ -245,8 +252,9 @@ object TextFormat {
         fun pending(): String {
             val pend = v.pendingRepairs
             return if (pend.isEmpty() && v.repairs.isNotEmpty()) "REPAROS CONCLUÍDOS"
-            else pend.joinToString(" + ") { r ->
-                r.station.label.uppercase() + if (r.note.isBlank()) "" else " (${r.note})"
+            // "*EX-OK*: descrição · *POLIMENTO*" — estação em negrito no WhatsApp, sem parênteses aninhados
+            else pend.joinToString(" · ") { r ->
+                "*" + r.station.label.uppercase() + "*" + if (r.note.isBlank()) "" else ": ${r.note.trim()}"
             }
         }
         val desc = when (v.status) {
