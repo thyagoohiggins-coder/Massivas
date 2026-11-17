@@ -400,3 +400,16 @@ class StationInsideNoteTest {
         assertEquals(listOf(Repair(Station.EX_OK, "falta pintura no friso")), p.repairs)
     }
 }
+
+class FooterTest {
+    @Test
+    fun onlyTotalReleasedPending() {
+        val vs = listOf(
+            Vehicle("1", "VB000001", CarModel.C655, status = Status.TUNEL),
+            Vehicle("2", "VB000002", CarModel.C655, status = Status.LIBERADO),
+            Vehicle("3", "VB000003", CarModel.C655),
+        )
+        val text = TextFormat.export(vs, "X", includeDate = false)
+        assertTrue(text.endsWith("*Total: 3* | Liberados ✅: 1 | Em processo: 2"))
+    }
+}

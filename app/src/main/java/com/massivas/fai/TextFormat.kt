@@ -243,8 +243,8 @@ object TextFormat {
         val released = list.count { it.status == Status.LIBERADO }
         val tunnel = list.count { it.status == Status.TUNEL }
         val parked = list.count { it.status == Status.BOLSAO }
-        // Sem contagem de bolsão no rodapé da mensagem (só uso interno).
-        sb.append("\n*Total: ${list.size}* | Liberados ✅: $released | Túnel: $tunnel | Em processo: ${list.size - released - tunnel - parked}")
+        // Rodapé só com total, liberados e em processo (sem contagem de túnel ou bolsão).
+        sb.append("\n*Total: ${list.size}* | Liberados ✅: $released | Em processo: ${list.size - released}")
         return sb.toString()
     }
 
