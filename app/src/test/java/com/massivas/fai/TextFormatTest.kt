@@ -410,6 +410,6 @@ class FooterTest {
             Vehicle("3", "VB000003", CarModel.C655),
         )
         val text = TextFormat.export(vs, "X", includeDate = false)
-        assertTrue(text.endsWith("*Total: 3* | Liberados ✅: 1 | Em processo: 2"))
+        assertTrue(text.endsWith("*Total: 3* | Aprovados: 1"))
     }
 }

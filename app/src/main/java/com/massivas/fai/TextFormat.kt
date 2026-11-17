@@ -243,8 +243,8 @@ object TextFormat {
         val released = list.count { it.status == Status.LIBERADO }
         val tunnel = list.count { it.status == Status.TUNEL }
         val parked = list.count { it.status == Status.BOLSAO }
-        // Rodapé só com total, liberados e em processo (sem contagem de túnel ou bolsão).
-        sb.append("\n*Total: ${list.size}* | Liberados ✅: $released | Em processo: ${list.size - released}")
+        // Rodapé só com o total e os aprovados (liberados).
+        sb.append("\n*Total: ${list.size}* | Aprovados: $released")
         return sb.toString()
     }
 
