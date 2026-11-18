@@ -254,9 +254,9 @@ object TextFormat {
         v.color?.let { sb.append(" - ").append(it.label.uppercase()) }
         fun pending(): String {
             val pend = v.pendingRepairs
-            return if (pend.isEmpty() && v.repairs.isNotEmpty()) "REPAROS CONCLUÍDOS"
-            // "*EX-OK*: descrição · *POLIMENTO*" — estação em negrito no WhatsApp, sem parênteses aninhados
-            else pend.joinToString(" · ") { r ->
+            // "*EX-OK*: descrição · *POLIMENTO*" — estação em negrito no WhatsApp, sem parênteses aninhados.
+            // Reparos já concluídos simplesmente não aparecem (sem "REPAROS CONCLUÍDOS").
+            return pend.joinToString(" · ") { r ->
                 "*" + r.station.label.uppercase() + "*" + if (r.note.isBlank()) "" else ": ${r.note.trim()}"
             }
         }

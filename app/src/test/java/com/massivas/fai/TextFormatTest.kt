@@ -413,3 +413,14 @@ class FooterTest {
         assertTrue(text.endsWith("*Total: 3* | Aprovados: 1"))
     }
 }
+
+class DoneRepairsTest {
+    @Test
+    fun noReparosConcluidos() {
+        val v = Vehicle("1", "VB001433", CarModel.C655, color = CarColor.AZUL,
+            repairs = listOf(Repair(Station.POLIMENTO, "CO", done = true)), notes = "Lavar veiculo")
+        val text = TextFormat.export(listOf(v), "X", includeDate = false)
+        assertTrue(!text.contains("CONCLU"))
+        assertTrue(text.contains("1 - VB001433 - CS55 - AZUL - Lavar veiculo"))
+    }
+}
